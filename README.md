@@ -25,13 +25,13 @@
 ### 方式2：下载源码
 `git clone https://github.com/007Secret/007Secret.git`
 
-### 后端
+#### 后端
 1. 确保已安装 Go 1.16+ 和 Redis
 2. 进入 backend 目录
 3. 复制 `.env.example` 为 `.env` 并配置环境变量
 4. 运行 `go run main.go`
 
-### 前端
+#### 前端
 1. 进入 frontend 目录
 2. 安装依赖：`npm install`
 3. 启动开发服务器：`npm run dev` 
