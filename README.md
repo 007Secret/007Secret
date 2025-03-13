@@ -22,9 +22,7 @@
 2. 复制 .env.example 为 .env 并配置环境变量，并将`REDIS_HOST=localhost`改为`REDIS_HOST=redis`
 3. 回到项目根目录，执行`docker-compose up -d`
 
-### 方式2：下载源码
-`git clone https://github.com/007Secret/007Secret.git`
-
+### 方式2：手动安装
 #### 后端
 1. 确保已安装 Go 1.16+ 和 Redis
 2. 进入 backend 目录
