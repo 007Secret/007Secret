@@ -3,10 +3,10 @@ import { RouterView } from 'vue-router'
 </script>
 
 <template>
-  <div class="min-h-screen h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
+  <div class="w-full h-screen flex flex-col bg-gray-50 dark:bg-gray-900 mx-auto overflow-hidden">
     <!-- Header -->
-    <header class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <header class="w-full bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
+      <div class="container mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between h-16">
           <div class="flex items-center">
             <router-link to="/" class="flex-shrink-0 flex items-center">
@@ -17,7 +17,7 @@ import { RouterView } from 'vue-router'
               </div>
               <span class="ml-2 text-xl font-bold text-gray-900 dark:text-white">007Secret</span>
             </router-link>
-            <nav class="ml-8 flex space-x-8">
+            <nav class="hidden md:ml-8 md:flex md:space-x-8">
               <router-link to="/" class="border-blue-500 text-gray-900 dark:text-white inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
                 首页
               </router-link>
@@ -29,11 +29,18 @@ import { RouterView } from 'vue-router'
               </a>
             </nav>
           </div>
-          <div class="flex items-center">
+          <div class="flex items-center space-x-4">
             <button class="bg-gray-200 dark:bg-gray-700 p-2 rounded-full text-gray-500 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
               <span class="sr-only">切换主题</span>
               <svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+              </svg>
+            </button>
+            <!-- 移动端菜单按钮 -->
+            <button type="button" class="md:hidden inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500">
+              <span class="sr-only">打开菜单</span>
+              <svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
           </div>
@@ -42,18 +49,20 @@ import { RouterView } from 'vue-router'
     </header>
 
     <!-- Main Content -->
-    <main class="flex-1 flex flex-col overflow-auto">
-      <RouterView />
+    <main class="flex-1 flex flex-col justify-start overflow-hidden w-full">
+      <div class="container mx-auto px-4 sm:px-6 lg:px-8 pt-1 pb-7">
+        <RouterView />
+      </div>
     </main>
 
     <!-- Footer -->
-    <footer class="flex-shrink-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
-      <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        <div class="flex flex-col items-center justify-center">
-          <p class="text-sm text-gray-500 dark:text-gray-400">
+    <footer class="w-full flex-shrink-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+      <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div class="flex flex-col items-center">
+          <p class="text-sm text-gray-500 dark:text-gray-400 text-center mb-2">
             © {{ new Date().getFullYear() }} 007Secret. 保障您的信息安全
           </p>
-          <div class="mt-2 flex space-x-6">
+          <div class="flex justify-center space-x-6">
             <a href="#" class="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300">
               <span class="sr-only">隐私政策</span>
               隐私政策
@@ -75,6 +84,37 @@ import { RouterView } from 'vue-router'
 
 <style>
 @import '@/assets/tailwind.css';
+
+html, body {
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  position: fixed;
+}
+
+#app {
+  width: 100%;
+  min-width: 100%;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+}
+
+/* 禁用所有滚动 */
+main, .container, .min-h-screen {
+  overflow: hidden;
+}
+
+/* 使用Tailwind的container类的默认样式 */
+.container {
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+}
 
 /* 自定义动画 */
 .fade-enter-active, .fade-leave-active {

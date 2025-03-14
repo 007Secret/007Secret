@@ -1,6 +1,6 @@
 <template>
-  <div class="about-container">
-    <div class="card">
+  <div class="about-container flex flex-col items-center justify-center w-full">
+    <div class="card max-w-3xl w-full">
       <div class="card-header">
         <h1 class="card-title">关于 007Secret</h1>
         <p class="card-description">安全、简单的一次性信息分享服务</p>
@@ -115,24 +115,41 @@
 </script>
 
 <style scoped>
+:root {
+  --primary-color: #3b82f6;
+  --bg-primary: #ffffff;
+  --bg-secondary: #f9fafb;
+  --text-primary: #1f2937;
+  --text-secondary: #4b5563;
+  --border-color: #e5e7eb;
+  --radius: 0.5rem;
+}
+
+.dark {
+  --primary-color: #3b82f6;
+  --bg-primary: #1f2937;
+  --bg-secondary: #111827;
+  --text-primary: #f9fafb;
+  --text-secondary: #d1d5db;
+  --border-color: #374151;
+}
+
 .about-container {
-  max-width: 48rem;
-  margin: 0 auto;
-  padding: 0 1rem;
+  padding: 2rem 0;
+  width: 100%;
 }
 
 .card {
   background-color: var(--bg-primary);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   overflow: hidden;
-  margin-bottom: 2rem;
 }
 
 .card-header {
   padding: 1.5rem;
-  text-align: center;
   border-bottom: 1px solid var(--border-color);
+  text-align: center;
 }
 
 .card-title {
@@ -142,8 +159,14 @@
   margin: 0 0 0.5rem 0;
 }
 
+@media (min-width: 640px) {
+  .card-title {
+    font-size: 1.875rem;
+  }
+}
+
 .card-description {
-  font-size: 0.875rem;
+  font-size: 1rem;
   color: var(--text-secondary);
   margin: 0;
 }
@@ -152,12 +175,14 @@
   padding: 1.5rem;
 }
 
-.about-section {
-  margin-bottom: 2rem;
+@media (min-width: 640px) {
+  .card-body {
+    padding: 2rem;
+  }
 }
 
-.about-section:last-child {
-  margin-bottom: 0;
+.about-section {
+  margin-bottom: 2rem;
 }
 
 .section-title {
@@ -169,10 +194,23 @@
   border-bottom: 1px solid var(--border-color);
 }
 
+@media (min-width: 640px) {
+  .section-title {
+    font-size: 1.5rem;
+  }
+}
+
 .section-content {
   font-size: 0.875rem;
-  line-height: 1.6;
   color: var(--text-secondary);
+  line-height: 1.6;
+  margin: 0;
+}
+
+@media (min-width: 640px) {
+  .section-content {
+    font-size: 1rem;
+  }
 }
 
 .steps-container {
@@ -181,9 +219,17 @@
   gap: 1.5rem;
 }
 
+@media (min-width: 768px) {
+  .steps-container {
+    flex-direction: row;
+  }
+}
+
 .step {
   display: flex;
   gap: 1rem;
+  align-items: flex-start;
+  flex: 1;
 }
 
 .step-number {
@@ -210,18 +256,42 @@
   margin: 0 0 0.25rem 0;
 }
 
+@media (min-width: 640px) {
+  .step-title {
+    font-size: 1.125rem;
+  }
+}
+
 .step-description {
   font-size: 0.875rem;
   color: var(--text-secondary);
   margin: 0;
 }
 
+@media (min-width: 640px) {
+  .step-description {
+    font-size: 1rem;
+  }
+}
+
 .security-features {
   list-style: none;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: 1fr;
   gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .security-features {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .security-features {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }
 
 .feature-item {
@@ -232,6 +302,12 @@
   color: var(--text-secondary);
 }
 
+@media (min-width: 640px) {
+  .feature-item {
+    font-size: 1rem;
+  }
+}
+
 .feature-icon {
   width: 1.25rem;
   height: 1.25rem;
@@ -240,8 +316,20 @@
 
 .use-cases {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  grid-template-columns: 1fr;
   gap: 1.5rem;
+}
+
+@media (min-width: 640px) {
+  .use-cases {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .use-cases {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 
 .use-case {
@@ -257,6 +345,12 @@
   margin: 0 0 0.5rem 0;
 }
 
+@media (min-width: 640px) {
+  .use-case-title {
+    font-size: 1.125rem;
+  }
+}
+
 .use-case-description {
   font-size: 0.875rem;
   color: var(--text-secondary);
@@ -264,18 +358,9 @@
   line-height: 1.6;
 }
 
-@media (max-width: 640px) {
-  .security-features,
-  .use-cases {
-    grid-template-columns: 1fr;
-  }
-  
-  .card-title {
-    font-size: 1.25rem;
-  }
-  
-  .section-title {
-    font-size: 1.125rem;
+@media (min-width: 640px) {
+  .use-case-description {
+    font-size: 1rem;
   }
 }
 </style> 
