@@ -6,6 +6,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>007Secret - 一次性密钥分享</title>
     <base href="/">
+    <!-- 预先应用暗黑模式，防止闪烁 -->
+    <script>
+      // 检查本地存储中的主题偏好
+      const savedTheme = localStorage.getItem('theme');
+      if (savedTheme === 'dark' || 
+          (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+        document.body.classList.add('dark');
+      }
+    </script>
   </head>
   <body>
     <div id="app"></div>
