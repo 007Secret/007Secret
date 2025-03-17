@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"net/http"
 
@@ -28,6 +29,14 @@ func generateRandomString(length int) string {
 	b := make([]byte, length)
 	rand.Read(b)
 	return base64.URLEncoding.EncodeToString(b)[:length]
+}
+
+// 生成加密密钥
+func generateEncryptionKey(key, password string) []byte {
+	// 使用SHA-256生成固定长度的密钥
+	h := sha256.New()
+	h.Write([]byte(key + password))
+	return h.Sum(nil)
 }
 
 func compressData(data []byte) ([]byte, error) {
@@ -69,8 +78,20 @@ func CreateSecretHandler(c *gin.Context) {
 	key := generateRandomString(8)
 	password := generateRandomString(4)
 
-	// 压缩数据
-	compressed, err := compressData([]byte(req.Content))
+	// 生成加密密钥
+	encryptionKey := generateEncryptionKey(key, password)
+
+	// 先加密数据
+	encrypted, err := utils.EncryptData([]byte(req.Content), encryptionKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error: "Failed to encrypt data",
+		})
+		return
+	}
+
+	// 再压缩数据
+	compressed, err := compressData(encrypted)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Error: "Failed to compress data",
@@ -112,7 +133,10 @@ func GetSecretHandler(c *gin.Context) {
 		return
 	}
 
-	// 解压数据
+	// 生成加密密钥
+	encryptionKey := generateEncryptionKey(key, password)
+
+	// 先解压数据
 	decompressed, err := decompressData(data)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -121,7 +145,16 @@ func GetSecretHandler(c *gin.Context) {
 		return
 	}
 
+	// 再解密数据
+	decrypted, err := utils.DecryptData(decompressed, encryptionKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error: "Failed to decrypt data",
+		})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"content": string(decompressed),
+		"content": string(decrypted),
 	})
 }
