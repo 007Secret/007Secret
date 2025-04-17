@@ -8,6 +8,7 @@ WORKDIR /app
 COPY go.* ./
 
 # 下载依赖
+ENV GOPROXY=https://goproxy.cn,direct
 RUN go mod download
 
 # 复制源代码和配置文件
