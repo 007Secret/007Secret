@@ -161,7 +161,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 
 const router = useRouter()
@@ -172,6 +172,11 @@ const showContent = ref(false)
 const error = ref('')
 const loading = ref(false)
 const showCopyNotification = ref(false)
+
+onMounted(() => {
+  const queryPassword = route.query.password
+  password.value = Array.isArray(queryPassword) ? queryPassword[0] ?? '' : queryPassword ?? ''
+})
 
 const viewSecret = async () => {
   if (!password.value || loading.value) return

@@ -171,7 +171,9 @@ async function createSecret() {
     }
 
     const data = await response.json()
-    shareLink.value = `${window.location.origin}/s/${data.key}`
+    const url = new URL(`/s/${data.key}`, window.location.origin)
+    url.searchParams.set('password', data.password)
+    shareLink.value = url.toString()
     password.value = data.password
     showResult.value = true
   } catch (error) {
