@@ -86,3 +86,7 @@ frontend/*.local
 frontend/cypress/videos/
 frontend/cypress/screenshots/
 frontend/*.tsbuildinfo
+
+# Other
+docs/
+k8s/

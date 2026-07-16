@@ -1,184 +1,74 @@
-<script setup>
+<script setup lang="ts">
 import { RouterView } from 'vue-router'
-import { ref, onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 
-// 创建一个响应式变量来跟踪暗黑模式状态
 const isDarkMode = ref(false)
+const themeLabel = computed(() => (isDarkMode.value ? '切换为浅色主题' : '切换为深色主题'))
 
-// 在组件挂载时检查本地存储或系统偏好
+function applyTheme() {
+  document.documentElement.classList.toggle('dark', isDarkMode.value)
+}
+
 onMounted(() => {
-  // 检查本地存储中的偏好
   const savedTheme = localStorage.getItem('theme')
-  if (savedTheme) {
-    isDarkMode.value = savedTheme === 'dark'
-  } else {
-    // 如果没有保存的偏好，则检查系统偏好
-    isDarkMode.value = window.matchMedia('(prefers-color-scheme: dark)').matches
-  }
+  isDarkMode.value = savedTheme
+    ? savedTheme === 'dark'
+    : window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
   applyTheme()
 })
 
-// 监听isDarkMode的变化并应用主题
 watch(isDarkMode, () => {
   applyTheme()
-  // 保存用户偏好到本地存储
   localStorage.setItem('theme', isDarkMode.value ? 'dark' : 'light')
 })
 
-// 应用主题到HTML元素
-const applyTheme = () => {
-  if (isDarkMode.value) {
-    document.documentElement.classList.add('dark')
-    document.body.classList.add('dark')
-  } else {
-    document.documentElement.classList.remove('dark')
-    document.body.classList.remove('dark')
-  }
-}
-
-// 切换暗黑模式
-const toggleDarkMode = () => {
+function toggleDarkMode() {
   isDarkMode.value = !isDarkMode.value
 }
 </script>
 
 <template>
-  <div class="w-full h-screen flex flex-col bg-gray-50 dark:bg-gray-900 mx-auto overflow-hidden">
-    <!-- Header -->
-    <header class="w-full bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
-      <div class="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex justify-between h-16">
-          <div class="flex items-center">
-            <router-link to="/" class="flex-shrink-0 flex items-center">
-              <div class="w-8 h-8 bg-blue-600 rounded-md flex items-center justify-center">
-                <svg class="h-5 w-5 text-white" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 15V17M6 9V7C6 4.79086 7.79086 3 10 3H14C16.2091 3 18 4.79086 18 7V9M6 9C3.79086 9 2 10.7909 2 13V17C2 19.2091 3.79086 21 6 21H18C20.2091 21 22 19.2091 22 17V13C22 10.7909 20.2091 9 18 9M6 9H18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </div>
-              <span class="ml-2 text-xl font-bold text-gray-900 dark:text-white">007Secret</span>
-            </router-link>
-            <nav class="hidden md:ml-8 md:flex md:space-x-8">
-              <router-link to="/" class="border-blue-500 text-gray-900 dark:text-white inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                首页
-              </router-link>
-              <a href="#" class="border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 dark:hover:text-gray-200 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                关于我们
-              </a>
-              <a href="#" class="border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 dark:hover:text-gray-200 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                使用帮助
-              </a>
-            </nav>
+  <div class="relative flex min-h-screen flex-col overflow-hidden bg-[var(--page)] text-[var(--text)]">
+    <div aria-hidden="true" class="app-grid pointer-events-none fixed inset-0 opacity-80"></div>
+    <div aria-hidden="true" class="pointer-events-none fixed left-1/2 top-[-12rem] h-[34rem] w-[54rem] -translate-x-1/2 rounded-full bg-blue-500/10 blur-3xl"></div>
+
+    <header class="sticky top-0 z-20 border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--surface)_88%,transparent)] backdrop-blur-xl">
+      <div class="mx-auto flex h-[72px] w-full max-w-7xl items-center justify-between px-5 sm:px-7 lg:px-8">
+        <router-link to="/" class="group flex items-center gap-3" aria-label="007Secret 首页">
+          <span class="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-lg shadow-blue-600/20 transition-transform group-hover:-translate-y-0.5">
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M7 10V7a5 5 0 0 1 10 0v3m-9 0h8a2 2 0 0 1 2 2v7H6v-7a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+              <path d="M12 14v2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            </svg>
+          </span>
+          <span class="text-xl font-extrabold tracking-tight">007Secret</span>
+        </router-link>
+
+        <div class="flex items-center gap-3">
+          <div class="hidden items-center gap-2 rounded-full border border-blue-200 bg-[var(--primary-soft)] px-3.5 py-2 text-xs font-semibold text-[var(--primary)] sm:flex dark:border-blue-800">
+            <span class="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,.12)]"></span>
+            端到端加密 · 阅后即焚
           </div>
-          <div class="flex items-center space-x-4">
-            <button @click="toggleDarkMode" class="bg-gray-200 dark:bg-gray-700 p-2 rounded-full text-gray-500 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-              <span class="sr-only">切换主题</span>
-              <svg v-if="!isDarkMode" class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-              </svg>
-              <svg v-else class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-              </svg>
-            </button>
-            <!-- 移动端菜单按钮 -->
-            <button type="button" class="md:hidden inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500">
-              <span class="sr-only">打开菜单</span>
-              <svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
-          </div>
+          <button
+            type="button"
+            :aria-label="themeLabel"
+            :title="themeLabel"
+            class="grid h-10 w-10 place-items-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] transition hover:-translate-y-0.5 hover:text-[var(--primary)]"
+            @click="toggleDarkMode"
+          >
+            <svg v-if="!isDarkMode" class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20.5 15.2A8.7 8.7 0 0 1 8.8 3.5 8.7 8.7 0 1 0 20.5 15.2Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" /></svg>
+            <svg v-else class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.8"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </button>
         </div>
       </div>
     </header>
 
-    <!-- Main Content -->
-    <main class="flex-1 flex flex-col justify-start overflow-hidden w-full">
-      <div class="container mx-auto px-4 sm:px-6 lg:px-8 pt-1 pb-7">
-        <RouterView />
-      </div>
+    <main class="relative z-10 flex flex-1">
+      <RouterView />
     </main>
 
-    <!-- Footer -->
-    <footer class="w-full flex-shrink-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
-      <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-4">
-        <div class="flex flex-col items-center">
-          <p class="text-sm text-gray-500 dark:text-gray-400 text-center mb-2">
-            © {{ new Date().getFullYear() }} 007Secret. 保障您的信息安全
-          </p>
-          <div class="flex justify-center space-x-6">
-            <a href="#" class="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300">
-              <span class="sr-only">隐私政策</span>
-              隐私政策
-            </a>
-            <a href="#" class="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300">
-              <span class="sr-only">使用条款</span>
-              使用条款
-            </a>
-            <a href="#" class="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300">
-              <span class="sr-only">联系我们</span>
-              联系我们
-            </a>
-          </div>
-        </div>
-      </div>
+    <footer class="relative z-10 px-5 py-5 text-center text-xs text-[var(--muted)]">
+      © {{ new Date().getFullYear() }} 007Secret · 为敏感信息而生
     </footer>
   </div>
 </template>
-
-<style>
-@import '@/assets/tailwind.css';
-
-html, body {
-  width: 100%;
-  max-width: 100%;
-  height: 100%;
-  overflow: hidden;
-  margin: 0;
-  padding: 0;
-  position: fixed;
-}
-
-#app {
-  width: 100%;
-  min-width: 100%;
-  height: 100%;
-  overflow: hidden;
-  display: flex;
-  justify-content: center;
-}
-
-/* 禁用所有滚动 */
-main, .container, .min-h-screen {
-  overflow: hidden;
-}
-
-/* 使用Tailwind的container类的默认样式 */
-.container {
-  width: 100%;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-/* 自定义动画 */
-.fade-enter-active, .fade-leave-active {
-  transition: opacity 0.3s;
-}
-.fade-enter, .fade-leave-to {
-  opacity: 0;
-}
-
-/* 确保文本区域在暗模式下有正确的颜色 */
-textarea::placeholder, input::placeholder {
-  color: #9ca3af;
-}
-.dark textarea::placeholder, .dark input::placeholder {
-  color: #6b7280;
-}
-
-/* 平滑过渡效果 */
-.transition-colors {
-  transition-property: background-color, border-color, color, fill, stroke;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: 150ms;
-}
-</style>
