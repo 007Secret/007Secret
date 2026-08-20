@@ -9,6 +9,13 @@
 - 数据压缩：所有存储的数据都会被压缩以节省空间
 - 简单易用：简洁的用户界面，容易操作
 
+## 效果图
+<img width="1469" height="1180" alt="image" src="https://github.com/user-attachments/assets/e0fc9370-dffd-4b34-984f-698bbb077d18" />
+<img width="1578" height="1048" alt="image" src="https://github.com/user-attachments/assets/2323d23e-971d-4628-990d-b0c43982183f" />
+<img width="1475" height="1100" alt="image" src="https://github.com/user-attachments/assets/264df738-7e84-4730-bfa9-f7dc89c49378" />
+<img width="1244" height="977" alt="image" src="https://github.com/user-attachments/assets/077d1596-bc1d-4c2a-b643-8d671a65bfe2" />
+
+
 ## 技术栈
 
 - 前端：Vue.js
