@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"math/big"
 	"net/http"
 
 	"github.com/007Secret/007Secret/utils"
@@ -29,6 +30,22 @@ func generateRandomString(length int) string {
 	b := make([]byte, length)
 	rand.Read(b)
 	return base64.URLEncoding.EncodeToString(b)[:length]
+}
+
+func generateAlphanumericString(length int) (string, error) {
+	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+
+	result := make([]byte, length)
+	alphabetLength := big.NewInt(int64(len(alphabet)))
+	for i := range result {
+		index, err := rand.Int(rand.Reader, alphabetLength)
+		if err != nil {
+			return "", err
+		}
+		result[i] = alphabet[index.Int64()]
+	}
+
+	return string(result), nil
 }
 
 // 生成加密密钥
@@ -76,7 +93,13 @@ func CreateSecretHandler(c *gin.Context) {
 
 	// 生成随机密钥和密码
 	key := generateRandomString(8)
-	password := generateRandomString(4)
+	password, err := generateAlphanumericString(4)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error: "Failed to generate password",
+		})
+		return
+	}
 
 	// 生成加密密钥
 	encryptionKey := generateEncryptionKey(key, password)
