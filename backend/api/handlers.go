@@ -6,20 +6,41 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"math/big"
 	"net/http"
+	"strings"
 
 	"github.com/007Secret/007Secret/utils"
 	"github.com/gin-gonic/gin"
 )
 
+const maxAttachmentSize = 10 * 1024 * 1024
+
+type AttachmentMetadata struct {
+	Name string `json:"name"`
+	Size int64  `json:"size"`
+	Type string `json:"type"`
+}
+
 type SecretRequest struct {
-	Content string `json:"content" binding:"required"`
+	Content    string              `json:"content" binding:"required"`
+	Attachment *AttachmentMetadata `json:"attachment,omitempty"`
+}
+
+type secretPayload struct {
+	Content    string              `json:"content"`
+	Attachment *AttachmentMetadata `json:"attachment,omitempty"`
 }
 
 type SecretResponse struct {
 	Key      string `json:"key"`
 	Password string `json:"password"`
+}
+
+type RetrievedSecretResponse struct {
+	Content    string              `json:"content"`
+	Attachment *AttachmentMetadata `json:"attachment,omitempty"`
 }
 
 type ErrorResponse struct {
@@ -82,12 +103,29 @@ func decompressData(data []byte) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
+func validateAttachmentMetadata(attachment *AttachmentMetadata) error {
+	if attachment == nil {
+		return nil
+	}
+	if strings.TrimSpace(attachment.Name) == "" || strings.ContainsAny(attachment.Name, "/\\") {
+		return http.ErrNotSupported
+	}
+	if attachment.Size < 0 || attachment.Size > maxAttachmentSize {
+		return http.ErrContentLength
+	}
+	return nil
+}
+
 func CreateSecretHandler(c *gin.Context) {
 	var req SecretRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Error: "Invalid request body",
 		})
+		return
+	}
+	if err := validateAttachmentMetadata(req.Attachment); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Invalid attachment metadata"})
 		return
 	}
 
@@ -104,8 +142,14 @@ func CreateSecretHandler(c *gin.Context) {
 	// 生成加密密钥
 	encryptionKey := generateEncryptionKey(key, password)
 
+	payload, err := json.Marshal(secretPayload{Content: req.Content, Attachment: req.Attachment})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to encode secret"})
+		return
+	}
+
 	// 先加密数据
-	encrypted, err := utils.EncryptData([]byte(req.Content), encryptionKey)
+	encrypted, err := utils.EncryptData(payload, encryptionKey)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Error: "Failed to encrypt data",
@@ -177,7 +221,11 @@ func GetSecretHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"content": string(decrypted),
-	})
+	var payload secretPayload
+	if err := json.Unmarshal(decrypted, &payload); err != nil {
+		// Secrets created before attachment support stored raw text.
+		payload.Content = string(decrypted)
+	}
+
+	c.JSON(http.StatusOK, RetrievedSecretResponse{Content: payload.Content, Attachment: payload.Attachment})
 }
