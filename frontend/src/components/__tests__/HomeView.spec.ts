@@ -50,4 +50,53 @@ describe('HomeView', () => {
 
     expect(wrapper.get('[role="alert"]').text()).toContain('创建分享失败，请稍后重试')
   })
+
+  it('fills an empty secret with the selected attachment name without replacing typed text', async () => {
+    const wrapper = mount(HomeView)
+    const fileInput = wrapper.get('input[type="file"]')
+    const secret = wrapper.get('textarea[aria-label="秘密内容"]')
+    const file = new File(['report'], 'report.pdf', { type: 'application/pdf' })
+
+    Object.defineProperty(fileInput.element, 'files', { value: [file], configurable: true })
+    await fileInput.trigger('change')
+    expect((secret.element as HTMLTextAreaElement).value).toBe('report.pdf')
+
+    await secret.setValue('keep this secret')
+    Object.defineProperty(fileInput.element, 'files', { value: [new File(['new'], 'new.pdf')], configurable: true })
+    await fileInput.trigger('change')
+    expect((secret.element as HTMLTextAreaElement).value).toBe('keep this secret')
+  })
+
+  it('rejects attachments larger than 10 MB before creating a secret', async () => {
+    const wrapper = mount(HomeView)
+    const oversized = new File([new Uint8Array(10 * 1024 * 1024 + 1)], 'large.bin')
+
+    const fileInput = wrapper.get('input[type="file"]')
+    Object.defineProperty(fileInput.element, 'files', { value: [oversized], configurable: true })
+    await fileInput.trigger('change')
+
+    expect(wrapper.get('[role="alert"]').text()).toContain('文件不能超过 10 MB')
+    expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('includes selected attachment metadata in the create request', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ key: 'abc123', password: '8F4K2P' }),
+    }))
+    const wrapper = mount(HomeView)
+    const file = new File(['report'], 'report.pdf', { type: 'application/pdf' })
+
+    const fileInput = wrapper.get('input[type="file"]')
+    Object.defineProperty(fileInput.element, 'files', { value: [file], configurable: true })
+    await fileInput.trigger('change')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    const [, options] = vi.mocked(fetch).mock.calls[0]
+    expect(JSON.parse(String(options?.body))).toEqual({
+      content: 'report.pdf',
+      attachment: { name: 'report.pdf', size: file.size, type: 'application/pdf' },
+    })
+  })
 })

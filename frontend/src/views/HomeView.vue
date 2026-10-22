@@ -8,8 +8,34 @@ const password = ref('')
 const loading = ref(false)
 const createError = ref('')
 const copyMessage = ref('')
+const attachment = ref<File | null>(null)
+const attachmentError = ref('')
 
-const canSubmit = computed(() => content.value.trim().length > 0 && !loading.value)
+const maxAttachmentSize = 10 * 1024 * 1024
+
+const canSubmit = computed(() => content.value.trim().length > 0 && !loading.value && !attachmentError.value)
+
+function selectAttachment(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0] ?? null
+  attachmentError.value = ''
+  attachment.value = null
+
+  if (!file) return
+  if (file.size > maxAttachmentSize) {
+    attachmentError.value = '文件不能超过 10 MB'
+    input.value = ''
+    return
+  }
+
+  attachment.value = file
+  if (!content.value.trim()) content.value = file.name
+}
+
+function removeAttachment() {
+  attachment.value = null
+  attachmentError.value = ''
+}
 
 async function createSecret() {
   if (!canSubmit.value) return
@@ -20,7 +46,16 @@ async function createSecret() {
     const response = await fetch('/api/secret', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: content.value }),
+      body: JSON.stringify({
+        content: content.value,
+        ...(attachment.value ? {
+          attachment: {
+            name: attachment.value.name,
+            size: attachment.value.size,
+            type: attachment.value.type,
+          },
+        } : {}),
+      }),
     })
     if (!response.ok) throw new Error('Failed to create secret')
 
@@ -52,6 +87,8 @@ function reset() {
   shareLink.value = ''
   password.value = ''
   createError.value = ''
+  attachment.value = null
+  attachmentError.value = ''
   showResult.value = false
 }
 </script>
@@ -100,11 +137,23 @@ function reset() {
             ></textarea>
           </div>
 
+          <div>
+            <div class="mb-2 flex items-center justify-between"><label for="attachment" class="text-sm font-bold">附件 <span class="font-normal text-[var(--muted)]">（可选）</span></label><span class="text-xs text-[var(--muted)]">最大 10 MB</span></div>
+            <input id="attachment" class="sr-only" type="file" @change="selectAttachment" />
+            <label for="attachment" class="flex min-h-16 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-blue-300 bg-blue-50/60 px-4 text-center transition hover:border-[var(--primary)] hover:bg-blue-50 dark:bg-blue-950/20">
+              <svg class="h-7 w-7 flex-none rounded-lg bg-blue-100 p-1.5 text-[var(--primary)] dark:bg-blue-900/50" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 18a4 4 0 1 1 .9-7.9A5.5 5.5 0 0 1 18.7 12 3 3 0 0 1 18 18H7Z" stroke="currentColor" stroke-width="1.8"/><path d="m12 9 0 6m-2-4 2-2 2 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+              <span><strong class="block text-sm">拖入文件，或点击选择</strong><span class="block text-xs text-[var(--muted)]">单个文件 · 最大 10 MB</span></span>
+            </label>
+            <div v-if="attachment" class="mt-2 flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50/50 p-3 dark:border-blue-900 dark:bg-blue-950/20"><svg class="h-5 w-5 flex-none text-[var(--primary)]" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z" stroke="currentColor" stroke-width="1.8"/><path d="M14 2v6h6" stroke="currentColor" stroke-width="1.8"/></svg><span class="min-w-0 flex-1 truncate text-sm font-semibold">{{ attachment.name }}</span><button type="button" class="rounded-lg px-2 py-1 text-sm font-bold text-[var(--muted)] hover:bg-white hover:text-red-600 dark:hover:bg-slate-800" @click="removeAttachment">移除</button></div>
+          </div>
+
+          <p v-if="attachmentError" role="alert" class="rounded-xl border border-red-300/60 bg-red-500/10 px-4 py-3 text-sm font-medium text-[var(--danger)]">{{ attachmentError }}</p>
+
           <p v-if="createError" role="alert" class="rounded-xl border border-red-300/60 bg-red-500/10 px-4 py-3 text-sm font-medium text-[var(--danger)]">{{ createError }}</p>
 
           <div class="flex items-start gap-2.5 text-xs leading-5 text-[var(--muted)]">
             <svg class="mt-0.5 h-4 w-4 flex-none text-[var(--primary)]" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m12 3 8 3v5c0 5-3.4 8.4-8 10-4.6-1.6-8-5-8-10V6l8-3Z" stroke="currentColor" stroke-width="1.8"/><path d="m9 12 2 2 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            内容将被加密存储，我们无法读取
+            内容将被加密存储，我们无法读取；带附件时优先使用 WebRTC 点对点传输
           </div>
 
           <button type="submit" :disabled="!canSubmit" class="flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-b from-blue-500 to-blue-700 font-bold text-white shadow-lg shadow-blue-600/20 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0">
@@ -122,6 +171,7 @@ function reset() {
           <div><label for="extract-code" class="mb-2 block text-sm font-bold">提取码</label><div class="flex flex-col gap-2 sm:flex-row"><input id="extract-code" :value="password" readonly class="h-14 min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-[var(--surface-soft)] px-4 text-center font-mono text-2xl font-black tracking-[.3em]"><button class="h-14 rounded-xl bg-[var(--primary)] px-5 font-bold text-white" @click="copy(password, '提取码')">复制提取码</button></div></div>
 
           <div class="flex gap-3 rounded-xl border border-amber-400/50 bg-amber-500/10 p-4 text-sm text-[var(--warning)]"><span aria-hidden="true">⚠</span><div><strong class="block">仅可查看一次</strong><span>内容被读取后会立即销毁，且无法恢复</span></div></div>
+          <div v-if="attachment" class="flex gap-3 rounded-xl border border-blue-300/60 bg-blue-500/10 p-4 text-sm text-[var(--primary)]"><span aria-hidden="true">↔</span><div><strong class="block">请保持此页面打开</strong><span>接收者领取附件时，会优先建立 WebRTC 点对点传输。</span></div></div>
           <button class="h-13 w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] font-bold text-[var(--primary)] transition hover:bg-[var(--primary-soft)]" @click="reset">创建新的分享</button>
         </div>
       </section>
