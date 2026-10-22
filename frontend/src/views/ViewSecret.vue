@@ -8,6 +8,7 @@ const route = useRoute()
 const password = ref('')
 const content = ref('')
 const showContent = ref(false)
+const showTransfer = ref(false)
 const error = ref('')
 const loading = ref(false)
 const copyMessage = ref('')
@@ -29,12 +30,32 @@ async function viewSecret() {
 
   loading.value = true
   error.value = ''
+  showTransfer.value = false
+  stopReceivingAttachment?.()
+  stopReceivingAttachment = undefined
   try {
+    const metadataResponse = await fetch(`/api/secret/attachment?key=${key}&password=${encodeURIComponent(password.value)}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    })
+    if (!metadataResponse.ok) {
+      if (metadataResponse.status === 404) throw new Error('密钥不存在或已被查看')
+      if (metadataResponse.status === 401) throw new Error('提取码错误')
+      throw new Error('服务器错误，请稍后重试')
+    }
+    const metadata = await metadataResponse.json()
+    if (!metadata.attachment) {
+      await consumeSecret(key)
+      return
+    }
+
+    showTransfer.value = true
+    attachmentStatus.value = '正在等待发送方建立 WebRTC 点对点连接…'
     stopReceivingAttachment = receiveAttachment({ key, password: password.value }, {
       onProgress: (transferred, total) => {
         attachmentStatus.value = `正在接收附件：${Math.round(transferred / total * 100)}%`
       },
-      onComplete: (file) => {
+      onComplete: async (file) => {
         const url = URL.createObjectURL(file)
         const link = document.createElement('a')
         link.href = url
@@ -42,34 +63,37 @@ async function viewSecret() {
         link.click()
         URL.revokeObjectURL(url)
         attachmentStatus.value = '附件已接收并开始下载'
+        try {
+          await consumeSecret(key)
+        } catch (err) {
+          attachmentStatus.value = `${attachmentStatus.value}；秘密内容无法读取：${err instanceof Error ? err.message : '请稍后重试'}`
+        }
       },
       onError: (message) => {
         attachmentStatus.value = message
       },
     })
-    const response = await fetch(`/api/secret/get?key=${key}&password=${encodeURIComponent(password.value)}`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-    })
-    if (!response.ok) {
-      if (response.status === 404) throw new Error('密钥不存在或已被查看')
-      if (response.status === 401) throw new Error('提取码错误')
-      throw new Error('服务器错误，请稍后重试')
-    }
-    const data = await response.json()
-    content.value = data.content
-    if (!data.attachment) {
-      stopReceivingAttachment?.()
-      stopReceivingAttachment = undefined
-    } else {
-      attachmentStatus.value = '正在等待发送者建立 WebRTC 点对点连接…'
-    }
-    showContent.value = true
   } catch (err) {
     error.value = err instanceof Error ? err.message : '未知错误，请稍后重试'
   } finally {
     loading.value = false
   }
+}
+
+async function consumeSecret(key: string) {
+  const response = await fetch(`/api/secret/get?key=${key}&password=${encodeURIComponent(password.value)}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    })
+  if (!response.ok) {
+    if (response.status === 404) throw new Error('密钥不存在或已被查看')
+    if (response.status === 401) throw new Error('提取码错误')
+    throw new Error('服务器错误，请稍后重试')
+  }
+  const data = await response.json()
+  content.value = data.content
+  showTransfer.value = false
+  showContent.value = true
 }
 
 async function copyContent() {
@@ -90,7 +114,7 @@ function goHome() {
 <template>
   <div class="mx-auto flex w-full max-w-5xl items-center px-5 py-12 sm:px-7 sm:py-16 lg:px-8">
     <div class="w-full text-center">
-      <template v-if="!showContent && !error">
+      <template v-if="!showContent && !showTransfer && !error">
         <div class="mb-4 inline-flex items-center gap-3 text-sm font-bold text-[var(--primary)]"><span class="h-2 w-2 rounded-full bg-[var(--primary)] shadow-[0_0_0_6px_rgba(37,99,235,.1)]"></span>一次性秘密</div>
         <h1 class="text-[clamp(2.5rem,6vw,4rem)] font-black leading-tight tracking-[-0.045em]">查看秘密内容</h1>
         <p class="mx-auto mt-4 max-w-2xl text-base text-[var(--muted)] sm:text-lg">输入提取码后，秘密将被读取并立即销毁</p>
@@ -102,6 +126,16 @@ function goHome() {
           <button type="submit" :disabled="!password.trim() || loading" class="flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-b from-blue-500 to-blue-700 font-bold text-white shadow-lg shadow-blue-600/20 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0"><svg v-if="loading" class="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity=".3" stroke-width="3"/><path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg><span>{{ loading ? '正在解密…' : '解密并查看' }}</span></button>
           <div class="flex gap-3 rounded-xl border border-amber-400/50 bg-amber-500/10 p-4 text-sm text-[var(--warning)]"><span aria-hidden="true">⚠</span><div><strong class="block">打开前请确认</strong><span>成功读取后，此链接将永久失效</span></div></div>
         </form>
+      </template>
+
+      <template v-else-if="showTransfer">
+        <div class="app-surface mx-auto max-w-xl space-y-5 rounded-[24px] p-6 sm:p-9">
+          <div class="mx-auto grid h-14 w-14 place-items-center rounded-full bg-blue-500/10 text-2xl text-[var(--primary)]">↔</div>
+          <div><p class="text-sm font-bold text-[var(--primary)]">WebRTC 点对点传输</p><h1 class="mt-1 text-3xl font-black tracking-tight sm:text-4xl">正在等待发送方</h1><p class="mt-2 text-sm text-[var(--muted)]">附件不会经由服务器中转或暂存。</p></div>
+          <p class="rounded-xl border border-blue-300/60 bg-blue-500/10 p-4 text-left text-sm text-[var(--primary)]">{{ attachmentStatus }}</p>
+          <div class="flex gap-3 rounded-xl border border-amber-400/50 bg-amber-500/10 p-4 text-left text-sm text-[var(--warning)]"><span aria-hidden="true">⚠</span><div><strong class="block">双方必须同时在线</strong><span>发送方需保持创建分享的原始页面打开；接收方保持当前分享链接页面打开。若连接失败，请重新尝试连接。</span></div></div>
+          <button class="h-13 w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] font-bold text-[var(--primary)] hover:bg-[var(--primary-soft)]" @click="viewSecret">重新尝试连接</button>
+        </div>
       </template>
 
       <template v-else-if="showContent">

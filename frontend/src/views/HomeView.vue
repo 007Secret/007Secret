@@ -76,7 +76,7 @@ async function createSecret() {
           transferStatus.value = message
         },
       })
-      transferStatus.value = '等待接收者建立 WebRTC 点对点连接…'
+      transferStatus.value = '等待接收者建立 WebRTC 点对点连接。发送方与接收方必须同时在线并保持页面打开。'
     }
   } catch {
     createError.value = '创建分享失败，请稍后重试'
@@ -167,7 +167,7 @@ function reset() {
 
           <div class="flex items-start gap-2.5 text-xs leading-5 text-[var(--muted)]">
             <svg class="mt-0.5 h-4 w-4 flex-none text-[var(--primary)]" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m12 3 8 3v5c0 5-3.4 8.4-8 10-4.6-1.6-8-5-8-10V6l8-3Z" stroke="currentColor" stroke-width="1.8"/><path d="m9 12 2 2 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            内容将被加密存储，我们无法读取；带附件时优先使用 WebRTC 点对点传输
+            内容将被加密存储，我们无法读取；附件仅通过 WebRTC 点对点传输，发送方与接收方必须同时在线并保持页面打开
           </div>
 
           <button type="submit" :disabled="!canSubmit" class="flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-b from-blue-500 to-blue-700 font-bold text-white shadow-lg shadow-blue-600/20 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0">

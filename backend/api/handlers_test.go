@@ -118,3 +118,40 @@ func TestSecretHandlersRoundTripAttachmentMetadata(t *testing.T) {
 		t.Fatalf("attachment = %#v, want report metadata", got)
 	}
 }
+
+func TestAttachmentMetadataCheckDoesNotConsumeSecret(t *testing.T) {
+	server := miniredis.RunT(t)
+	previousClient := utils.RedisClient
+	utils.RedisClient = redis.NewClient(&redis.Options{Addr: server.Addr()})
+	defer func() { _ = utils.RedisClient.Close(); utils.RedisClient = previousClient }()
+
+	createRequest := httptest.NewRequest(http.MethodPost, "/api/secret", strings.NewReader(`{"content":"report.pdf","attachment":{"name":"report.pdf","size":3,"type":"application/pdf"}}`))
+	createRequest.Header.Set("Content-Type", "application/json")
+	createResponse := httptest.NewRecorder()
+	createContext, _ := gin.CreateTestContext(createResponse)
+	createContext.Request = createRequest
+	CreateSecretHandler(createContext)
+
+	var created SecretResponse
+	if err := json.Unmarshal(createResponse.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+
+	metadataRequest := httptest.NewRequest(http.MethodGet, "/api/secret/attachment?key="+created.Key+"&password="+created.Password, nil)
+	metadataResponse := httptest.NewRecorder()
+	metadataContext, _ := gin.CreateTestContext(metadataResponse)
+	metadataContext.Request = metadataRequest
+	GetAttachmentMetadataHandler(metadataContext)
+	if metadataResponse.Code != http.StatusOK {
+		t.Fatalf("metadata status = %d, want %d", metadataResponse.Code, http.StatusOK)
+	}
+
+	getRequest := httptest.NewRequest(http.MethodGet, "/api/secret/get?key="+created.Key+"&password="+created.Password, nil)
+	getResponse := httptest.NewRecorder()
+	getContext, _ := gin.CreateTestContext(getResponse)
+	getContext.Request = getRequest
+	GetSecretHandler(getContext)
+	if getResponse.Code != http.StatusOK {
+		t.Fatalf("get after metadata status = %d, want %d", getResponse.Code, http.StatusOK)
+	}
+}

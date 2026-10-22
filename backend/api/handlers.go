@@ -229,3 +229,32 @@ func GetSecretHandler(c *gin.Context) {
 
 	c.JSON(http.StatusOK, RetrievedSecretResponse{Content: payload.Content, Attachment: payload.Attachment})
 }
+
+func GetAttachmentMetadataHandler(c *gin.Context) {
+	key, password := c.Query("key"), c.Query("password")
+	if key == "" || password == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Missing key or password"})
+		return
+	}
+	data, err := utils.PeekSecret(key + ":" + password)
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{Error: "Secret not found or already accessed"})
+		return
+	}
+	decompressed, err := decompressData(data)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to decompress data"})
+		return
+	}
+	decrypted, err := utils.DecryptData(decompressed, generateEncryptionKey(key, password))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to decrypt data"})
+		return
+	}
+	var payload secretPayload
+	if err := json.Unmarshal(decrypted, &payload); err != nil {
+		c.JSON(http.StatusOK, gin.H{"attachment": nil})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"attachment": payload.Attachment})
+}

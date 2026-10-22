@@ -30,10 +30,9 @@ describe('ViewSecret', () => {
   })
 
   it('renders decrypted content and the destruction notice after success', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ content: 'server password: top-secret' }),
-    }))
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ attachment: null }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ content: 'server password: top-secret' }) }))
     const wrapper = mount(ViewSecret)
 
     await wrapper.get('input').setValue('8F4K2P')
@@ -43,6 +42,24 @@ describe('ViewSecret', () => {
     expect(wrapper.text()).toContain('解密成功')
     expect(wrapper.text()).toContain('server password: top-secret')
     expect(wrapper.text()).toContain('此秘密已销毁')
+  })
+
+  it('explains that an attachment needs both people online and never requests a relay', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ attachment: { name: 'report.pdf', size: 3, type: 'application/pdf' } }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const wrapper = mount(ViewSecret)
+
+    await wrapper.get('input').setValue('8F4K2P')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('双方必须同时在线')
+    expect(wrapper.text()).toContain('附件不会经由服务器中转或暂存')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/api/secret/attachment')
   })
 
   it('renders a consumed-link error and returns home', async () => {

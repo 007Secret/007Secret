@@ -8,6 +8,8 @@ export type TransferCallbacks = {
 }
 
 const chunkSize = 64 * 1024
+const connectionTimeout = 30_000
+const offlinePeerMessage = '无法建立 WebRTC 点对点连接。请确认发送方与接收方同时在线并保持页面打开，然后重试。'
 
 function signalingURL(credentials: TransferCredentials, role: 'sender' | 'receiver') {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -15,7 +17,7 @@ function signalingURL(credentials: TransferCredentials, role: 'sender' | 'receiv
   return `${protocol}//${window.location.host}/api/transfer/signal?${query}`
 }
 
-function sendSignal(socket: WebSocket, type: 'offer' | 'answer' | 'candidate', payload: unknown) {
+function sendSignal(socket: WebSocket, type: 'offer' | 'answer' | 'candidate' | 'ready', payload?: unknown) {
   socket.send(JSON.stringify({ type, payload }))
 }
 
@@ -26,77 +28,117 @@ function setupIce(peer: RTCPeerConnection, socket: WebSocket) {
 }
 
 export function startSendingAttachment(file: File, credentials: TransferCredentials, callbacks: TransferCallbacks = {}) {
-	if (typeof WebSocket === 'undefined' || typeof RTCPeerConnection === 'undefined') {
-		callbacks.onError?.('当前浏览器不支持 WebRTC 点对点传输')
-		return () => undefined
-	}
+  if (typeof WebSocket === 'undefined' || typeof RTCPeerConnection === 'undefined') {
+    callbacks.onError?.('当前浏览器不支持 WebRTC 点对点传输')
+    return () => undefined
+  }
   const socket = new WebSocket(signalingURL(credentials, 'sender'))
-  const peer = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] })
-  const channel = peer.createDataChannel('file-transfer', { ordered: true })
   let closed = false
+  let peer: RTCPeerConnection | undefined
+  let channel: RTCDataChannel | undefined
+  let attempt = 0
 
   const close = () => {
     if (closed) return
     closed = true
-    channel.close()
-    peer.close()
+    channel?.close()
+    peer?.close()
     socket.close()
   }
+  const fail = (message: string) => {
+    if (closed) return
+    callbacks.onError?.(message)
+    close()
+  }
 
-  setupIce(peer, socket)
+  const beginAttempt = async () => {
+    if (closed) return
+    attempt += 1
+    const currentAttempt = attempt
+    channel?.close()
+    peer?.close()
+    const currentPeer = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] })
+    const currentChannel = currentPeer.createDataChannel('file-transfer', { ordered: true })
+    peer = currentPeer
+    channel = currentChannel
+    setupIce(currentPeer, socket)
+    currentChannel.onmessage = ({ data }) => {
+      if (currentAttempt !== attempt || typeof data !== 'string') return
+      try {
+        if (JSON.parse(data).kind === 'received') close()
+      } catch {
+        // Ignore malformed control data from the peer.
+      }
+    }
+    currentChannel.onopen = async () => {
+      if (closed || currentAttempt !== attempt) return
+      try {
+        currentChannel.send(JSON.stringify({ kind: 'metadata', name: file.name, type: file.type, size: file.size }))
+        let transferred = 0
+        for (let offset = 0; offset < file.size; offset += chunkSize) {
+          if (currentAttempt !== attempt) return
+          while (currentChannel.bufferedAmount > chunkSize * 8) await new Promise(resolve => setTimeout(resolve, 20))
+          if (currentAttempt !== attempt) return
+          currentChannel.send(await file.slice(offset, offset + chunkSize).arrayBuffer())
+          transferred += Math.min(chunkSize, file.size - offset)
+          callbacks.onProgress?.(transferred, file.size)
+        }
+        currentChannel.send(JSON.stringify({ kind: 'complete' }))
+      } catch {
+        if (currentAttempt === attempt) callbacks.onError?.('附件发送失败，请让接收方重新尝试连接')
+      }
+    }
+    const offer = await currentPeer.createOffer()
+    if (closed || currentAttempt !== attempt) return
+    await currentPeer.setLocalDescription(offer)
+    if (closed || currentAttempt !== attempt) return
+    sendSignal(socket, 'offer', offer)
+  }
   socket.onmessage = async ({ data }) => {
     try {
       const signal = JSON.parse(String(data))
-      if (signal.type === 'answer') await peer.setRemoteDescription(signal.payload)
-      if (signal.type === 'candidate') await peer.addIceCandidate(signal.payload)
+      if (signal.type === 'ready') await beginAttempt()
+      if (signal.type === 'answer' && peer) await peer.setRemoteDescription(signal.payload)
+      if (signal.type === 'candidate' && peer) await peer.addIceCandidate(signal.payload)
     } catch {
-      callbacks.onError?.('无法处理点对点连接信令')
-      close()
+      fail('无法处理点对点连接信令')
     }
   }
-  socket.onerror = () => callbacks.onError?.('无法连接信令服务')
-  socket.onopen = async () => {
-    try {
-      const offer = await peer.createOffer()
-      await peer.setLocalDescription(offer)
-      sendSignal(socket, 'offer', offer)
-    } catch {
-      callbacks.onError?.('无法创建点对点连接')
-      close()
-    }
-  }
-  channel.onopen = async () => {
-    try {
-      channel.send(JSON.stringify({ kind: 'metadata', name: file.name, type: file.type, size: file.size }))
-      let transferred = 0
-      for (let offset = 0; offset < file.size; offset += chunkSize) {
-        while (channel.bufferedAmount > chunkSize * 8) await new Promise(resolve => setTimeout(resolve, 20))
-        channel.send(await file.slice(offset, offset + chunkSize).arrayBuffer())
-        transferred += Math.min(chunkSize, file.size - offset)
-        callbacks.onProgress?.(transferred, file.size)
-      }
-      channel.send(JSON.stringify({ kind: 'complete' }))
-    } catch {
-      callbacks.onError?.('附件发送失败')
-      close()
-    }
-  }
+  socket.onerror = () => fail('无法连接信令服务')
 
   return close
 }
 
 export function receiveAttachment(credentials: TransferCredentials, callbacks: TransferCallbacks = {}) {
-	if (typeof WebSocket === 'undefined' || typeof RTCPeerConnection === 'undefined') {
-		callbacks.onError?.('当前浏览器不支持 WebRTC 点对点传输')
-		return () => undefined
-	}
+  if (typeof WebSocket === 'undefined' || typeof RTCPeerConnection === 'undefined') {
+    callbacks.onError?.('当前浏览器不支持 WebRTC 点对点传输')
+    return () => undefined
+  }
   const socket = new WebSocket(signalingURL(credentials, 'receiver'))
   const peer = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] })
   let received = 0
   let metadata: { name: string; type: string; size: number } | null = null
   const chunks: BlobPart[] = []
+  let closed = false
+  let connected = false
+  let timeout: number | undefined
 
-  const close = () => { peer.close(); socket.close() }
+  const close = () => {
+    if (closed) return
+    closed = true
+    if (timeout) window.clearTimeout(timeout)
+    peer.close()
+    socket.close()
+  }
+  const fail = (message: string) => {
+    if (closed) return
+    callbacks.onError?.(message)
+    close()
+  }
+
+  timeout = window.setTimeout(() => {
+    if (!connected) fail(offlinePeerMessage)
+  }, connectionTimeout)
   setupIce(peer, socket)
   socket.onmessage = async ({ data }) => {
     try {
@@ -109,19 +151,28 @@ export function receiveAttachment(credentials: TransferCredentials, callbacks: T
       }
       if (signal.type === 'candidate') await peer.addIceCandidate(signal.payload)
     } catch {
-      callbacks.onError?.('无法建立点对点连接')
-      close()
+      fail('无法建立点对点连接')
     }
   }
-  socket.onerror = () => callbacks.onError?.('无法连接信令服务')
+  socket.onerror = () => fail('无法连接信令服务')
+  socket.onopen = () => sendSignal(socket, 'ready')
   peer.ondatachannel = ({ channel }) => {
+    connected = true
+    if (timeout) window.clearTimeout(timeout)
     channel.onmessage = async ({ data }) => {
       if (typeof data === 'string') {
         const control = JSON.parse(data)
-        if (control.kind === 'metadata') metadata = control
+        if (control.kind === 'metadata') {
+          if (!Number.isInteger(control.size) || control.size < 0 || control.size > maxAttachmentSize) {
+            fail('附件大小无效')
+            return
+          }
+          metadata = control
+        }
         if (control.kind === 'complete' && metadata && received === metadata.size) {
+          channel.send(JSON.stringify({ kind: 'received' }))
           callbacks.onComplete?.(new File([new Blob(chunks, { type: metadata.type })], metadata.name, { type: metadata.type }))
-          close()
+          window.setTimeout(close, 100)
         }
         return
       }

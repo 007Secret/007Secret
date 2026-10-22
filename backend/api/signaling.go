@@ -16,8 +16,10 @@ type signalingMessage struct {
 }
 
 type signalingRoom struct {
-	sender   *websocket.Conn
-	receiver *websocket.Conn
+	sender        *websocket.Conn
+	receiver      *websocket.Conn
+	receiverReady bool
+	writeMu       sync.Mutex
 }
 
 type SignalingHub struct {
@@ -50,10 +52,14 @@ func (h *SignalingHub) Handle(c *gin.Context) {
 	}
 
 	roomKey := key + ":" + password
-	if !h.addPeer(roomKey, role, connection) {
+	room, receiverReady, added := h.addPeer(roomKey, role, connection)
+	if !added {
 		_ = connection.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "role already connected"), time.Now().Add(time.Second))
 		_ = connection.Close()
 		return
+	}
+	if role == "sender" && receiverReady {
+		h.write(room, connection, []byte(`{"type":"ready"}`))
 	}
 	defer func() {
 		h.removePeer(roomKey, role, connection)
@@ -70,20 +76,21 @@ func (h *SignalingHub) Handle(c *gin.Context) {
 		}
 
 		var signal signalingMessage
-		if err := json.Unmarshal(message, &signal); err != nil || !isSignalType(signal.Type) || len(signal.Payload) == 0 {
+		if err := json.Unmarshal(message, &signal); err != nil || !isSignalType(signal.Type) || (signal.Type != "ready" && len(signal.Payload) == 0) {
 			continue
 		}
-		if peer := h.peer(roomKey, role); peer != nil {
-			_ = peer.WriteMessage(websocket.TextMessage, message)
+		if signal.Type == "ready" && role != "receiver" {
+			continue
 		}
+		h.forward(roomKey, role, signal.Type, message)
 	}
 }
 
 func isSignalType(messageType string) bool {
-	return messageType == "offer" || messageType == "answer" || messageType == "candidate"
+	return messageType == "offer" || messageType == "answer" || messageType == "candidate" || messageType == "ready"
 }
 
-func (h *SignalingHub) addPeer(roomKey, role string, connection *websocket.Conn) bool {
+func (h *SignalingHub) addPeer(roomKey, role string, connection *websocket.Conn) (*signalingRoom, bool, bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -94,16 +101,16 @@ func (h *SignalingHub) addPeer(roomKey, role string, connection *websocket.Conn)
 	}
 	if role == "sender" {
 		if room.sender != nil {
-			return false
+			return nil, false, false
 		}
 		room.sender = connection
-		return true
+		return room, room.receiverReady, true
 	}
 	if room.receiver != nil {
-		return false
+		return nil, false, false
 	}
 	room.receiver = connection
-	return true
+	return room, false, true
 }
 
 func (h *SignalingHub) removePeer(roomKey, role string, connection *websocket.Conn) {
@@ -125,16 +132,30 @@ func (h *SignalingHub) removePeer(roomKey, role string, connection *websocket.Co
 	}
 }
 
-func (h *SignalingHub) peer(roomKey, role string) *websocket.Conn {
+func (h *SignalingHub) forward(roomKey, role, signalType string, message []byte) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
-
 	room := h.rooms[roomKey]
 	if room == nil {
-		return nil
+		h.mu.Unlock()
+		return
 	}
+	if signalType == "ready" {
+		room.receiverReady = true
+	}
+	var peer *websocket.Conn
 	if role == "sender" {
-		return room.receiver
+		peer = room.receiver
+	} else {
+		peer = room.sender
 	}
-	return room.sender
+	h.mu.Unlock()
+	if peer != nil {
+		h.write(room, peer, message)
+	}
+}
+
+func (h *SignalingHub) write(room *signalingRoom, peer *websocket.Conn, message []byte) {
+	room.writeMu.Lock()
+	defer room.writeMu.Unlock()
+	_ = peer.WriteMessage(websocket.TextMessage, message)
 }

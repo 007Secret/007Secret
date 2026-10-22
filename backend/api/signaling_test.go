@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -49,6 +50,41 @@ func TestSignalingHubForwardsOfferOnlyToPairedReceiver(t *testing.T) {
 	}
 	if string(received) != message {
 		t.Fatalf("received = %s, want %s", received, message)
+	}
+}
+
+func TestSignalingHubDeliversStoredReceiverReadySignalToLaterSender(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	hub := NewSignalingHub()
+	router.GET("/api/transfer/signal", hub.Handle)
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	connect := func(role string) *websocket.Conn {
+		endpoint := strings.Replace(server.URL, "http://", "ws://", 1) + "/api/transfer/signal?key=secret&password=pass&role=" + role
+		connection, _, err := websocket.DefaultDialer.Dial(endpoint, nil)
+		if err != nil {
+			t.Fatalf("connect %s: %v", role, err)
+		}
+		return connection
+	}
+
+	receiver := connect("receiver")
+	defer receiver.Close()
+	if err := receiver.WriteMessage(websocket.TextMessage, []byte(`{"type":"ready"}`)); err != nil {
+		t.Fatalf("send ready: %v", err)
+	}
+
+	sender := connect("sender")
+	defer sender.Close()
+	_ = sender.SetReadDeadline(time.Now().Add(time.Second))
+	_, received, err := sender.ReadMessage()
+	if err != nil {
+		t.Fatalf("read stored ready signal: %v", err)
+	}
+	if string(received) != `{"type":"ready"}` {
+		t.Fatalf("received = %s, want ready signal", received)
 	}
 }
 

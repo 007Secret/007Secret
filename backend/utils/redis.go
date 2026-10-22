@@ -38,3 +38,11 @@ func GetSecret(key string) ([]byte, error) {
 	// 解码数据
 	return base64.StdEncoding.DecodeString(value)
 }
+
+func PeekSecret(key string) ([]byte, error) {
+	value, err := RedisClient.Get(ctx, key).Result()
+	if err != nil {
+		return nil, err
+	}
+	return base64.StdEncoding.DecodeString(value)
+}
