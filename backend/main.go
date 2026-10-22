@@ -34,8 +34,10 @@ func main() {
 	}))
 
 	// 注册路由处理器
+	signalingHub := api.NewSignalingHub()
 	r.POST("/api/secret", api.CreateSecretHandler)
 	r.GET("/api/secret/get", api.GetSecretHandler)
+	r.GET("/api/transfer/signal", signalingHub.Handle)
 
 	// 启动服务器
 	addr := ":" + config.AppConfig.Port
