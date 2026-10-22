@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { receiveAttachment } from '../lib/attachmentTransfer'
 
 const router = useRouter()
 const route = useRoute()
@@ -10,6 +11,8 @@ const showContent = ref(false)
 const error = ref('')
 const loading = ref(false)
 const copyMessage = ref('')
+const attachmentStatus = ref('')
+let stopReceivingAttachment: (() => void) | undefined
 
 onMounted(() => {
   const queryPassword = route.query.password
@@ -27,6 +30,23 @@ async function viewSecret() {
   loading.value = true
   error.value = ''
   try {
+    stopReceivingAttachment = receiveAttachment({ key, password: password.value }, {
+      onProgress: (transferred, total) => {
+        attachmentStatus.value = `正在接收附件：${Math.round(transferred / total * 100)}%`
+      },
+      onComplete: (file) => {
+        const url = URL.createObjectURL(file)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = file.name
+        link.click()
+        URL.revokeObjectURL(url)
+        attachmentStatus.value = '附件已接收并开始下载'
+      },
+      onError: (message) => {
+        attachmentStatus.value = message
+      },
+    })
     const response = await fetch(`/api/secret/get?key=${key}&password=${encodeURIComponent(password.value)}`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
@@ -38,6 +58,12 @@ async function viewSecret() {
     }
     const data = await response.json()
     content.value = data.content
+    if (!data.attachment) {
+      stopReceivingAttachment?.()
+      stopReceivingAttachment = undefined
+    } else {
+      attachmentStatus.value = '正在等待发送者建立 WebRTC 点对点连接…'
+    }
     showContent.value = true
   } catch (err) {
     error.value = err instanceof Error ? err.message : '未知错误，请稍后重试'
@@ -83,6 +109,7 @@ function goHome() {
           <div class="mx-auto grid h-14 w-14 place-items-center rounded-full bg-emerald-500/10 text-2xl text-[var(--success)]">✓</div>
           <div><p class="text-sm font-bold text-[var(--success)]">解密成功</p><h1 class="mt-1 text-3xl font-black tracking-tight sm:text-4xl">秘密内容</h1><p class="mt-2 text-sm text-[var(--muted)]">内容已读取并从服务器永久销毁</p></div>
           <div class="border-t border-[var(--line)] pt-5 text-left"><div class="mb-2 flex items-center justify-between gap-3"><span class="text-sm font-bold text-[var(--primary)]">仅此一次</span><button class="rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-bold text-white" @click="copyContent">复制内容</button></div><div class="min-h-40 whitespace-pre-wrap break-words rounded-xl border border-[var(--line)] bg-[var(--surface-soft)] p-5 font-mono leading-8">{{ content }}</div></div>
+          <p v-if="attachmentStatus" class="rounded-xl border border-blue-300/60 bg-blue-500/10 p-4 text-left text-sm text-[var(--primary)]">{{ attachmentStatus }}</p>
           <div class="flex gap-3 rounded-xl border border-amber-400/50 bg-amber-500/10 p-4 text-left text-sm text-[var(--warning)]"><span aria-hidden="true">⚠</span><div><strong class="block">此秘密已销毁</strong><span>关闭页面后将无法再次查看，请妥善保存需要的信息</span></div></div>
           <button data-test="home-button" class="h-13 w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] font-bold text-[var(--primary)] hover:bg-[var(--primary-soft)]" @click="goHome">返回首页</button>
         </div>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { startSendingAttachment } from '../lib/attachmentTransfer'
 
 const content = ref('')
 const showResult = ref(false)
@@ -10,6 +11,7 @@ const createError = ref('')
 const copyMessage = ref('')
 const attachment = ref<File | null>(null)
 const attachmentError = ref('')
+const transferStatus = ref('')
 
 const maxAttachmentSize = 10 * 1024 * 1024
 
@@ -65,6 +67,17 @@ async function createSecret() {
     shareLink.value = url.toString()
     password.value = data.password
     showResult.value = true
+    if (attachment.value) {
+      startSendingAttachment(attachment.value, data, {
+        onProgress: (transferred, total) => {
+          transferStatus.value = `正在点对点发送附件：${Math.round(transferred / total * 100)}%`
+        },
+        onError: (message) => {
+          transferStatus.value = message
+        },
+      })
+      transferStatus.value = '等待接收者建立 WebRTC 点对点连接…'
+    }
   } catch {
     createError.value = '创建分享失败，请稍后重试'
   } finally {
@@ -89,6 +102,7 @@ function reset() {
   createError.value = ''
   attachment.value = null
   attachmentError.value = ''
+  transferStatus.value = ''
   showResult.value = false
 }
 </script>
@@ -172,6 +186,7 @@ function reset() {
 
           <div class="flex gap-3 rounded-xl border border-amber-400/50 bg-amber-500/10 p-4 text-sm text-[var(--warning)]"><span aria-hidden="true">⚠</span><div><strong class="block">仅可查看一次</strong><span>内容被读取后会立即销毁，且无法恢复</span></div></div>
           <div v-if="attachment" class="flex gap-3 rounded-xl border border-blue-300/60 bg-blue-500/10 p-4 text-sm text-[var(--primary)]"><span aria-hidden="true">↔</span><div><strong class="block">请保持此页面打开</strong><span>接收者领取附件时，会优先建立 WebRTC 点对点传输。</span></div></div>
+          <p v-if="transferStatus" class="rounded-xl border border-[var(--line)] bg-[var(--surface-soft)] px-4 py-3 text-sm text-[var(--muted)]">{{ transferStatus }}</p>
           <button class="h-13 w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] font-bold text-[var(--primary)] transition hover:bg-[var(--primary-soft)]" @click="reset">创建新的分享</button>
         </div>
       </section>
