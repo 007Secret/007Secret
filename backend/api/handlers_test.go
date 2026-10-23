@@ -155,3 +155,55 @@ func TestAttachmentMetadataCheckDoesNotConsumeSecret(t *testing.T) {
 		t.Fatalf("get after metadata status = %d, want %d", getResponse.Code, http.StatusOK)
 	}
 }
+
+func TestDecodeSecretPayload(t *testing.T) {
+	key := generateEncryptionKey("key", "password")
+	for _, test := range []struct {
+		name      string
+		plaintext string
+		want      secretPayload
+	}{
+		{
+			name:      "text payload",
+			plaintext: `{"content":"secret text"}`,
+			want:      secretPayload{Content: "secret text"},
+		},
+		{
+			name:      "attachment payload",
+			plaintext: `{"content":"report.pdf","attachment":{"name":"report.pdf","size":3,"type":"application/pdf"}}`,
+			want: secretPayload{
+				Content:    "report.pdf",
+				Attachment: &AttachmentMetadata{Name: "report.pdf", Size: 3, Type: "application/pdf"},
+			},
+		},
+		{
+			name:      "legacy plain text",
+			plaintext: "旧版秘密内容",
+			want:      secretPayload{Content: "旧版秘密内容"},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			encrypted, err := utils.EncryptData([]byte(test.plaintext), key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			stored, err := compressData(encrypted)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := decodeSecretPayload(stored, key)
+			if err != nil || !reflect.DeepEqual(got, test.want) {
+				t.Fatalf("decode = %#v, %v; want %#v, nil", got, err, test.want)
+			}
+
+			got, err = decodeSecretPayload(stored, generateEncryptionKey("other", "password"))
+			if err == nil || err.Error() != "Failed to decrypt data" || !reflect.DeepEqual(got, secretPayload{}) {
+				t.Fatalf("wrong key: got %#v, %v; want empty payload and decryption error", got, err)
+			}
+		})
+	}
+
+	if _, err := decodeSecretPayload([]byte("invalid gzip"), key); err == nil || err.Error() != "Failed to decompress data" {
+		t.Fatalf("invalid gzip: got %v, want decompression error", err)
+	}
+}

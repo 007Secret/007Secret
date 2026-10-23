@@ -7,6 +7,7 @@ services:
       - "8080:80"
     depends_on:
       - backend
+    restart: unless-stopped
     networks:
       - 007Secret-network
 
@@ -25,6 +26,7 @@ services:
       - "8080"
     depends_on:
       - redis
+    restart: unless-stopped
     networks:
       - 007Secret-network
 
@@ -32,6 +34,7 @@ services:
     image: redis:latest
     ports:
       - "6379"
+    restart: unless-stopped
     networks:
       - 007Secret-network
 

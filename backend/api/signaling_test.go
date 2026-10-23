@@ -116,3 +116,40 @@ func TestSignalingHubRejectsUnknownRoleAndThirdPeer(t *testing.T) {
 		t.Fatalf("third sender error = %v, want policy close", err)
 	}
 }
+
+func TestSignalingHubKeepsWaitingSenderAlive(t *testing.T) {
+	router := gin.New()
+	hub := NewSignalingHub()
+	hub.pingInterval = 10 * time.Millisecond
+	router.GET("/api/transfer/signal", hub.Handle)
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	endpoint := strings.Replace(server.URL, "http://", "ws://", 1) + "/api/transfer/signal?key=idle-test&password=test&role=sender"
+	sender, _, err := websocket.DefaultDialer.Dial(endpoint, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sender.Close()
+
+	pings := make(chan struct{}, 1)
+	sender.SetPingHandler(func(data string) error {
+		select {
+		case pings <- struct{}{}:
+		default:
+		}
+		return sender.WriteControl(websocket.PongMessage, []byte(data), time.Now().Add(time.Second))
+	})
+	readDone := make(chan struct{})
+	go func() {
+		defer close(readDone)
+		_, _, _ = sender.ReadMessage()
+	}()
+	defer func() { _ = sender.Close(); <-readDone }()
+
+	select {
+	case <-pings:
+	case <-time.After(time.Second):
+		t.Fatal("waiting sender received no heartbeat; an idle reverse proxy will close it")
+	}
+}

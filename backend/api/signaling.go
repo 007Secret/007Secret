@@ -23,14 +23,16 @@ type signalingRoom struct {
 }
 
 type SignalingHub struct {
-	mu       sync.Mutex
-	rooms    map[string]*signalingRoom
-	upgrader websocket.Upgrader
+	mu           sync.Mutex
+	rooms        map[string]*signalingRoom
+	upgrader     websocket.Upgrader
+	pingInterval time.Duration
 }
 
 func NewSignalingHub() *SignalingHub {
 	return &SignalingHub{
-		rooms: make(map[string]*signalingRoom),
+		rooms:        make(map[string]*signalingRoom),
+		pingInterval: 20 * time.Second,
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(*http.Request) bool { return true },
 		},
@@ -58,6 +60,30 @@ func (h *SignalingHub) Handle(c *gin.Context) {
 		_ = connection.Close()
 		return
 	}
+	// Browser WebSockets answer ping frames automatically. Keep an idle sender's
+	// connection alive through reverse proxies while it waits for the recipient.
+	const pongTimeout = 60 * time.Second
+	_ = connection.SetReadDeadline(time.Now().Add(pongTimeout))
+	connection.SetPongHandler(func(string) error {
+		return connection.SetReadDeadline(time.Now().Add(pongTimeout))
+	})
+	heartbeatDone := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(h.pingInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-heartbeatDone:
+				return
+			case <-ticker.C:
+				if err := connection.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second)); err != nil {
+					_ = connection.Close()
+					return
+				}
+			}
+		}
+	}()
+	defer close(heartbeatDone)
 	if role == "sender" && receiverReady {
 		h.write(room, connection, []byte(`{"type":"ready"}`))
 	}

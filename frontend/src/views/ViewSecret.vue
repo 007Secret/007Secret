@@ -52,6 +52,7 @@ async function viewSecret() {
     showTransfer.value = true
     attachmentStatus.value = '正在等待发送方建立 WebRTC 点对点连接…'
     stopReceivingAttachment = receiveAttachment({ key, password: password.value }, {
+      onStatus: (message) => { attachmentStatus.value = message },
       onProgress: (transferred, total) => {
         attachmentStatus.value = `正在接收附件：${Math.round(transferred / total * 100)}%`
       },

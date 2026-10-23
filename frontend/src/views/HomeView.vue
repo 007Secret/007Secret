@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { startSendingAttachment } from '../lib/attachmentTransfer'
+import { maxAttachmentSize, startSendingAttachment } from '../lib/attachmentTransfer'
 
 const content = ref('')
 const showResult = ref(false)
@@ -13,20 +13,25 @@ const attachment = ref<File | null>(null)
 const attachmentError = ref('')
 const transferStatus = ref('')
 
-const maxAttachmentSize = 10 * 1024 * 1024
-
 const canSubmit = computed(() => content.value.trim().length > 0 && !loading.value && !attachmentError.value)
+
+function formatFileSize(size: number) {
+  if (size < 1024) return `${size} B`
+  const unit = size < 1024 * 1024 ? 'KB' : 'MB'
+  const value = size / (unit === 'KB' ? 1024 : 1024 * 1024)
+  return `${new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 }).format(value)} ${unit}`
+}
 
 function selectAttachment(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0] ?? null
+  input.value = ''
   attachmentError.value = ''
   attachment.value = null
 
   if (!file) return
   if (file.size > maxAttachmentSize) {
-    attachmentError.value = '文件不能超过 10 MB'
-    input.value = ''
+    attachmentError.value = '文件不能超过 10 MB，请选择更小的文件后重试。'
     return
   }
 
@@ -68,7 +73,9 @@ async function createSecret() {
     password.value = data.password
     showResult.value = true
     if (attachment.value) {
+      transferStatus.value = '等待接收者建立 WebRTC 点对点连接。发送方与接收方必须同时在线并保持页面打开。'
       startSendingAttachment(attachment.value, data, {
+        onStatus: (message) => { transferStatus.value = message },
         onProgress: (transferred, total) => {
           transferStatus.value = `正在点对点发送附件：${Math.round(transferred / total * 100)}%`
         },
@@ -76,7 +83,6 @@ async function createSecret() {
           transferStatus.value = message
         },
       })
-      transferStatus.value = '等待接收者建立 WebRTC 点对点连接。发送方与接收方必须同时在线并保持页面打开。'
     }
   } catch {
     createError.value = '创建分享失败，请稍后重试'
@@ -153,15 +159,14 @@ function reset() {
 
           <div>
             <div class="mb-2 flex items-center justify-between"><label for="attachment" class="text-sm font-bold">附件 <span class="font-normal text-[var(--muted)]">（可选）</span></label><span class="text-xs text-[var(--muted)]">最大 10 MB</span></div>
-            <input id="attachment" class="sr-only" type="file" @change="selectAttachment" />
+            <input id="attachment" class="sr-only" type="file" :aria-invalid="!!attachmentError" :aria-describedby="attachmentError ? 'attachment-error' : undefined" @change="selectAttachment" />
             <label for="attachment" class="flex min-h-16 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-blue-300 bg-blue-50/60 px-4 text-center transition hover:border-[var(--primary)] hover:bg-blue-50 dark:bg-blue-950/20">
               <svg class="h-7 w-7 flex-none rounded-lg bg-blue-100 p-1.5 text-[var(--primary)] dark:bg-blue-900/50" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 18a4 4 0 1 1 .9-7.9A5.5 5.5 0 0 1 18.7 12 3 3 0 0 1 18 18H7Z" stroke="currentColor" stroke-width="1.8"/><path d="m12 9 0 6m-2-4 2-2 2 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
               <span><strong class="block text-sm">拖入文件，或点击选择</strong><span class="block text-xs text-[var(--muted)]">单个文件 · 最大 10 MB</span></span>
             </label>
-            <div v-if="attachment" class="mt-2 flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50/50 p-3 dark:border-blue-900 dark:bg-blue-950/20"><svg class="h-5 w-5 flex-none text-[var(--primary)]" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z" stroke="currentColor" stroke-width="1.8"/><path d="M14 2v6h6" stroke="currentColor" stroke-width="1.8"/></svg><span class="min-w-0 flex-1 truncate text-sm font-semibold">{{ attachment.name }}</span><button type="button" class="rounded-lg px-2 py-1 text-sm font-bold text-[var(--muted)] hover:bg-white hover:text-red-600 dark:hover:bg-slate-800" @click="removeAttachment">移除</button></div>
+            <div v-if="attachment" class="mt-2 flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50/50 p-3 dark:border-blue-900 dark:bg-blue-950/20"><svg class="h-5 w-5 flex-none text-[var(--primary)]" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z" stroke="currentColor" stroke-width="1.8"/><path d="M14 2v6h6" stroke="currentColor" stroke-width="1.8"/></svg><span class="min-w-0 flex-1 truncate text-sm font-semibold" :title="attachment.name">{{ attachment.name }}</span><span class="flex-none text-xs tabular-nums text-[var(--muted)]">{{ formatFileSize(attachment.size) }}</span><button type="button" class="rounded-lg px-2 py-1 text-sm font-bold text-[var(--muted)] hover:bg-white hover:text-red-600 dark:hover:bg-slate-800" @click="removeAttachment">移除</button></div>
+            <p v-if="attachmentError" id="attachment-error" role="alert" class="mt-2 rounded-xl border border-red-300/60 bg-red-500/10 px-4 py-3 text-sm font-medium text-[var(--danger)]">{{ attachmentError }}</p>
           </div>
-
-          <p v-if="attachmentError" role="alert" class="rounded-xl border border-red-300/60 bg-red-500/10 px-4 py-3 text-sm font-medium text-[var(--danger)]">{{ attachmentError }}</p>
 
           <p v-if="createError" role="alert" class="rounded-xl border border-red-300/60 bg-red-500/10 px-4 py-3 text-sm font-medium text-[var(--danger)]">{{ createError }}</p>
 
@@ -185,7 +190,7 @@ function reset() {
           <div><label for="extract-code" class="mb-2 block text-sm font-bold">提取码</label><div class="flex flex-col gap-2 sm:flex-row"><input id="extract-code" :value="password" readonly class="h-14 min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-[var(--surface-soft)] px-4 text-center font-mono text-2xl font-black tracking-[.3em]"><button class="h-14 rounded-xl bg-[var(--primary)] px-5 font-bold text-white" @click="copy(password, '提取码')">复制提取码</button></div></div>
 
           <div class="flex gap-3 rounded-xl border border-amber-400/50 bg-amber-500/10 p-4 text-sm text-[var(--warning)]"><span aria-hidden="true">⚠</span><div><strong class="block">仅可查看一次</strong><span>内容被读取后会立即销毁，且无法恢复</span></div></div>
-          <div v-if="attachment" class="flex gap-3 rounded-xl border border-blue-300/60 bg-blue-500/10 p-4 text-sm text-[var(--primary)]"><span aria-hidden="true">↔</span><div><strong class="block">请保持此页面打开</strong><span>接收者领取附件时，会优先建立 WebRTC 点对点传输。</span></div></div>
+          <div v-if="attachment" class="flex gap-3 rounded-xl border border-blue-300/60 bg-blue-500/10 p-4 text-sm text-[var(--primary)]"><span aria-hidden="true">↔</span><div class="min-w-0"><p class="mb-2 break-all font-semibold">{{ attachment.name }} <span class="whitespace-nowrap font-normal">· {{ formatFileSize(attachment.size) }}</span></p><strong class="block">请保持此页面打开</strong><span>接收者领取附件时，会优先建立 WebRTC 点对点传输。</span></div></div>
           <p v-if="transferStatus" class="rounded-xl border border-[var(--line)] bg-[var(--surface-soft)] px-4 py-3 text-sm text-[var(--muted)]">{{ transferStatus }}</p>
           <button class="h-13 w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] font-bold text-[var(--primary)] transition hover:bg-[var(--primary-soft)]" @click="reset">创建新的分享</button>
         </div>

@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"math/big"
 	"net/http"
 	"strings"
@@ -101,6 +102,25 @@ func decompressData(data []byte) ([]byte, error) {
 		return nil, err
 	}
 	return out.Bytes(), nil
+}
+
+// decodeSecretPayload decodes stored bytes without reading or consuming Redis data.
+func decodeSecretPayload(data, encryptionKey []byte) (secretPayload, error) {
+	decompressed, err := decompressData(data)
+	if err != nil {
+		return secretPayload{}, errors.New("Failed to decompress data")
+	}
+	decrypted, err := utils.DecryptData(decompressed, encryptionKey)
+	if err != nil {
+		return secretPayload{}, errors.New("Failed to decrypt data")
+	}
+
+	var payload secretPayload
+	if err := json.Unmarshal(decrypted, &payload); err != nil {
+		// Secrets created before attachment support stored raw text.
+		return secretPayload{Content: string(decrypted)}, nil
+	}
+	return payload, nil
 }
 
 func validateAttachmentMetadata(attachment *AttachmentMetadata) error {
@@ -200,31 +220,10 @@ func GetSecretHandler(c *gin.Context) {
 		return
 	}
 
-	// 生成加密密钥
-	encryptionKey := generateEncryptionKey(key, password)
-
-	// 先解压数据
-	decompressed, err := decompressData(data)
+	payload, err := decodeSecretPayload(data, generateEncryptionKey(key, password))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Error: "Failed to decompress data",
-		})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 		return
-	}
-
-	// 再解密数据
-	decrypted, err := utils.DecryptData(decompressed, encryptionKey)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Error: "Failed to decrypt data",
-		})
-		return
-	}
-
-	var payload secretPayload
-	if err := json.Unmarshal(decrypted, &payload); err != nil {
-		// Secrets created before attachment support stored raw text.
-		payload.Content = string(decrypted)
 	}
 
 	c.JSON(http.StatusOK, RetrievedSecretResponse{Content: payload.Content, Attachment: payload.Attachment})
@@ -241,19 +240,9 @@ func GetAttachmentMetadataHandler(c *gin.Context) {
 		c.JSON(http.StatusNotFound, ErrorResponse{Error: "Secret not found or already accessed"})
 		return
 	}
-	decompressed, err := decompressData(data)
+	payload, err := decodeSecretPayload(data, generateEncryptionKey(key, password))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to decompress data"})
-		return
-	}
-	decrypted, err := utils.DecryptData(decompressed, generateEncryptionKey(key, password))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to decrypt data"})
-		return
-	}
-	var payload secretPayload
-	if err := json.Unmarshal(decrypted, &payload); err != nil {
-		c.JSON(http.StatusOK, gin.H{"attachment": nil})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"attachment": payload.Attachment})

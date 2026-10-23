@@ -90,3 +90,6 @@ frontend/*.tsbuildinfo
 # Other
 docs/
 k8s/
+.playwright-cli/
+.superpowers/
+outputs/

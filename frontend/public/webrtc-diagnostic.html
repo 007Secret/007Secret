@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><title>附件直连诊断</title>
+<body><h1>本机 WebRTC 连通性诊断</h1><pre id="result">正在检查…</pre>
+<script>
+const result = { state: 'running', localCandidates: 0, remoteCandidates: 0, candidateKinds: [], addedCandidates: 0, errors: [] };
+const output = document.getElementById('result');
+function render() {
+  result.local = { signaling: local.signalingState, ice: local.iceConnectionState, connection: local.connectionState };
+  result.remote = { signaling: remote.signalingState, ice: remote.iceConnectionState, connection: remote.connectionState };
+  output.textContent = JSON.stringify(result, null, 2);
+}
+const local = new RTCPeerConnection({ iceServers: [] });
+const remote = new RTCPeerConnection({ iceServers: [] });
+const pendingLocal = [], pendingRemote = [];
+async function candidate(peer, pending, value) {
+  if (!peer.remoteDescription) pending.push(value);
+  else { await peer.addIceCandidate(value); result.addedCandidates++; }
+}
+local.onicecandidate = event => {
+  if (event.candidate) {
+    result.localCandidates++;
+    result.candidateKinds.push({ side: 'local', type: event.candidate.type, protocol: event.candidate.protocol, mdns: event.candidate.address?.endsWith('.local') });
+    void candidate(remote, pendingRemote, event.candidate);
+  }
+  render();
+};
+remote.onicecandidate = event => {
+  if (event.candidate) {
+    result.remoteCandidates++;
+    result.candidateKinds.push({ side: 'remote', type: event.candidate.type, protocol: event.candidate.protocol, mdns: event.candidate.address?.endsWith('.local') });
+    void candidate(local, pendingLocal, event.candidate);
+  }
+  render();
+};
+local.onicegatheringstatechange = () => { result.gathering = local.iceGatheringState; render(); };
+local.onconnectionstatechange = () => { result.connection = local.connectionState; render(); };
+const channel = local.createDataChannel('local-diagnostic');
+channel.onopen = () => channel.send('local-check');
+remote.ondatachannel = event => {
+  event.channel.onmessage = message => {
+    result.state = message.data === 'local-check' ? 'passed' : 'failed';
+    render(); local.close(); remote.close();
+  };
+};
+window.addEventListener('unhandledrejection', event => { result.errors.push(event.reason?.name ?? 'unknown'); render(); });
+(async () => {
+  try {
+    await local.setLocalDescription(await local.createOffer());
+    await remote.setRemoteDescription(local.localDescription);
+    for (const value of pendingRemote.splice(0)) await remote.addIceCandidate(value);
+    await remote.setLocalDescription(await remote.createAnswer());
+    await local.setRemoteDescription(remote.localDescription);
+    for (const value of pendingLocal.splice(0)) await local.addIceCandidate(value);
+  } catch (error) { result.errors.push(error.name); render(); }
+})();
+setTimeout(async () => {
+  const stats = await local.getStats();
+  result.pairs = Array.from(stats.values()).filter(stat => stat.type === 'candidate-pair').map(stat => ({ state: stat.state, requestsSent: stat.requestsSent, responsesReceived: stat.responsesReceived }));
+  if (result.state === 'running') { result.state = 'timed-out'; render(); local.close(); remote.close(); }
+}, 8000);
+</script></body></html>

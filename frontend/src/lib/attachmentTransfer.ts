@@ -2,6 +2,7 @@ export const maxAttachmentSize = 10 * 1024 * 1024
 
 export type TransferCredentials = { key: string; password: string }
 export type TransferCallbacks = {
+  onStatus?: (message: string) => void
   onProgress?: (transferred: number, total: number) => void
   onComplete?: (file: File) => void
   onError?: (message: string) => void
@@ -21,8 +22,9 @@ function sendSignal(socket: WebSocket, type: 'offer' | 'answer' | 'candidate' | 
   socket.send(JSON.stringify({ type, payload }))
 }
 
-function setupIce(peer: RTCPeerConnection, socket: WebSocket) {
+function setupIce(peer: RTCPeerConnection, socket: WebSocket, onCandidate?: (candidate: RTCIceCandidate | null) => void) {
   peer.onicecandidate = (event) => {
+    onCandidate?.(event.candidate)
     if (event.candidate) sendSignal(socket, 'candidate', event.candidate)
   }
 }
@@ -97,7 +99,10 @@ export function startSendingAttachment(file: File, credentials: TransferCredenti
   socket.onmessage = async ({ data }) => {
     try {
       const signal = JSON.parse(String(data))
-      if (signal.type === 'ready') await beginAttempt()
+      if (signal.type === 'ready') {
+        callbacks.onStatus?.('接收方已上线，正在建立 WebRTC 点对点连接…')
+        await beginAttempt()
+      }
       if (signal.type === 'answer' && peer) await peer.setRemoteDescription(signal.payload)
       if (signal.type === 'candidate' && peer) await peer.addIceCandidate(signal.payload)
     } catch {
@@ -105,6 +110,9 @@ export function startSendingAttachment(file: File, credentials: TransferCredenti
     }
   }
   socket.onerror = () => fail('无法连接信令服务')
+  socket.onclose = () => {
+    if (channel?.readyState !== 'open') fail('信令连接已断开，请重新创建分享并保持发送页面打开')
+  }
 
   return close
 }
@@ -121,6 +129,9 @@ export function receiveAttachment(credentials: TransferCredentials, callbacks: T
   const chunks: BlobPart[] = []
   let closed = false
   let connected = false
+  let receivedOffer = false
+  let hasLocalMdnsCandidate = false
+  let hasRemoteMdnsCandidate = false
   let timeout: number | undefined
 
   const close = () => {
@@ -136,25 +147,50 @@ export function receiveAttachment(credentials: TransferCredentials, callbacks: T
     close()
   }
 
-  timeout = window.setTimeout(() => {
-    if (!connected) fail(offlinePeerMessage)
+  timeout = window.setTimeout(async () => {
+    if (closed || connected) return
+    let message = receivedOffer
+      ? '双方已在线，但未能建立 WebRTC 直连。请检查浏览器的本地网络权限、代理或网络限制，然后重试。'
+      : offlinePeerMessage
+    if (receivedOffer && hasLocalMdnsCandidate && hasRemoteMdnsCandidate && peer.iceGatheringState === 'complete') {
+      try {
+        const stats = await peer.getStats()
+        const hasRemoteAddress = Array.from(stats.values()).some(report => report.type === 'remote-candidate')
+        if (!hasRemoteAddress && navigator.userAgent.includes('Macintosh')) {
+          message = 'WebRTC 本地网络连接失败。请检查 macOS「系统设置 → 隐私与安全 → 本地网络」中的 Chrome 权限，然后重新连接。'
+        }
+      } catch {
+        // Keep the general connection error if the browser cannot provide stats.
+      }
+    }
+    if (!closed && !connected) fail(message)
   }, connectionTimeout)
-  setupIce(peer, socket)
+  setupIce(peer, socket, candidate => {
+    if (candidate?.address?.endsWith('.local')) hasLocalMdnsCandidate = true
+  })
   socket.onmessage = async ({ data }) => {
     try {
       const signal = JSON.parse(String(data))
       if (signal.type === 'offer') {
+        receivedOffer = true
+        callbacks.onStatus?.('已联系到发送方，正在建立 WebRTC 点对点连接…')
         await peer.setRemoteDescription(signal.payload)
         const answer = await peer.createAnswer()
         await peer.setLocalDescription(answer)
         sendSignal(socket, 'answer', answer)
       }
-      if (signal.type === 'candidate') await peer.addIceCandidate(signal.payload)
+      if (signal.type === 'candidate') {
+        if (signal.payload?.candidate?.includes('.local')) hasRemoteMdnsCandidate = true
+        await peer.addIceCandidate(signal.payload)
+      }
     } catch {
       fail('无法建立点对点连接')
     }
   }
   socket.onerror = () => fail('无法连接信令服务')
+  socket.onclose = () => {
+    if (!connected) fail('信令连接已断开，请重新尝试连接')
+  }
   socket.onopen = () => sendSignal(socket, 'ready')
   peer.ondatachannel = ({ channel }) => {
     connected = true
