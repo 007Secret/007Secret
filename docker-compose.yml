@@ -31,7 +31,8 @@ services:
       - 007Secret-network
 
   redis:
-    image: redis:latest
+    image: redis:8.10.1
+    pull_policy: missing
     ports:
       - "6379"
     restart: unless-stopped
