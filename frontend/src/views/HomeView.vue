@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { maxAttachmentSize, startSendingAttachment } from '../lib/attachmentTransfer'
+import { formatFileSize } from '../lib/formatFileSize'
 
 const content = ref('')
 const showResult = ref(false)
@@ -14,13 +15,6 @@ const attachmentError = ref('')
 const transferStatus = ref('')
 
 const canSubmit = computed(() => content.value.trim().length > 0 && !loading.value && !attachmentError.value)
-
-function formatFileSize(size: number) {
-  if (size < 1024) return `${size} B`
-  const unit = size < 1024 * 1024 ? 'KB' : 'MB'
-  const value = size / (unit === 'KB' ? 1024 : 1024 * 1024)
-  return `${new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 }).format(value)} ${unit}`
-}
 
 function selectAttachment(event: Event) {
   const input = event.target as HTMLInputElement
