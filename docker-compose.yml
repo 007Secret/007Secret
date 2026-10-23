@@ -17,13 +17,9 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    environment:
-      - GIN_MODE=release
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=
-      - REDIS_DB=0
-      - PORT=8080
+    # 后端配置不在 compose 里声明：镜像 Dockerfile 的 ENV 即为唯一来源
+    # （见 backend/Dockerfile）。本地 backend/.env 只服务于手动启动，
+    # 容器内由镜像里的 LOAD_DOTENV=false 保证不会读取 .env。
     expose:
       - "8080"
     depends_on:
@@ -34,7 +30,7 @@ services:
 
   redis:
     container_name: 007secret-redis
-    image: redis:8.10.1
+    image: redis:8.2-alpine
     pull_policy: missing
     ports:
       - "6379"
@@ -44,4 +40,4 @@ services:
 
 networks:
   007Secret-network:
-    driver: bridge 
+    driver: bridge

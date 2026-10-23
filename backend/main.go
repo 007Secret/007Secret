@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/007Secret/007Secret/api"
 	"github.com/007Secret/007Secret/config"
@@ -12,6 +13,10 @@ import (
 )
 
 func main() {
+	// 显式按 GIN_MODE 设置运行模式（release=关闭调试日志，未设置则 debug）。
+	// gin 只在包 init 时读一次该变量；若 .env 里配置了 GIN_MODE，需要在这里重新应用。
+	gin.SetMode(os.Getenv(gin.EnvGinMode))
+
 	// 初始化配置
 	if err := config.Init(); err != nil {
 		log.Fatal("Failed to load config:", err)
