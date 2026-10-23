@@ -1,5 +1,6 @@
 services:
   frontend:
+    container_name: 007secret-frontend
     build:
       context: ./frontend
       dockerfile: Dockerfile
@@ -12,6 +13,7 @@ services:
       - 007Secret-network
 
   backend:
+    container_name: 007secret-backend
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -31,6 +33,7 @@ services:
       - 007Secret-network
 
   redis:
+    container_name: 007secret-redis
     image: redis:8.10.1
     pull_policy: missing
     ports:
