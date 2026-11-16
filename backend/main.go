@@ -27,7 +27,14 @@ func main() {
 		log.Fatal("Failed to connect to Redis:", err)
 	}
 
-	// 创建 Gin 路由
+	// 启动服务器
+	addr := ":" + config.AppConfig.Port
+	fmt.Printf("Server is running on http://localhost%s\n", addr)
+	log.Fatal(setupRouter().Run(addr))
+}
+
+// setupRouter 构建 Gin 路由。单独拆出以便测试直接校验路由表。
+func setupRouter() *gin.Engine {
 	r := gin.Default()
 
 	// 配置CORS
@@ -42,11 +49,7 @@ func main() {
 	signalingHub := api.NewSignalingHub()
 	r.POST("/api/secret", api.CreateSecretHandler)
 	r.GET("/api/secret/get", api.GetSecretHandler)
-	r.GET("/api/secret/attachment", api.GetAttachmentMetadataHandler)
 	r.GET("/api/transfer/signal", signalingHub.Handle)
 
-	// 启动服务器
-	addr := ":" + config.AppConfig.Port
-	fmt.Printf("Server is running on http://localhost%s\n", addr)
-	log.Fatal(r.Run(addr))
+	return r
 }

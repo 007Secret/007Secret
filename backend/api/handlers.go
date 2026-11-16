@@ -151,7 +151,7 @@ func CreateSecretHandler(c *gin.Context) {
 
 	// 生成随机密钥和密码
 	key := generateRandomString(8)
-	password, err := generateAlphanumericString(4)
+	password, err := generateAlphanumericString(6)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Error: "Failed to generate password",
@@ -227,23 +227,4 @@ func GetSecretHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, RetrievedSecretResponse{Content: payload.Content, Attachment: payload.Attachment})
-}
-
-func GetAttachmentMetadataHandler(c *gin.Context) {
-	key, password := c.Query("key"), c.Query("password")
-	if key == "" || password == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Missing key or password"})
-		return
-	}
-	data, err := utils.PeekSecret(key + ":" + password)
-	if err != nil {
-		c.JSON(http.StatusNotFound, ErrorResponse{Error: "Secret not found or already accessed"})
-		return
-	}
-	payload, err := decodeSecretPayload(data, generateEncryptionKey(key, password))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"attachment": payload.Attachment})
 }
