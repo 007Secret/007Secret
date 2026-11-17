@@ -20,7 +20,7 @@ describe('App shell', () => {
     })
 
     expect(wrapper.get('a').text()).toContain('007Secret')
-    expect(wrapper.text()).toContain('端到端加密')
+    expect(wrapper.text()).toContain('加密存储')
     expect(wrapper.text()).toContain('阅后即焚')
     expect(wrapper.find('button[aria-label*="主题"]').exists()).toBe(true)
     expect(wrapper.text()).not.toContain('关于我们')

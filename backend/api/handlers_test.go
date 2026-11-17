@@ -100,7 +100,8 @@ func TestSecretHandlersRoundTripAttachmentMetadata(t *testing.T) {
 		t.Fatalf("created extraction code = %q, want a six-character alphanumeric code", created.Password)
 	}
 
-	getRequest := httptest.NewRequest(http.MethodGet, "/api/secret/get?key="+created.Key+"&password="+created.Password, nil)
+	getRequest := httptest.NewRequest(http.MethodPost, "/api/secret/get?key="+created.Key, strings.NewReader(`{"password":"`+created.Password+`"}`))
+	getRequest.Header.Set("Content-Type", "application/json")
 	getResponse := httptest.NewRecorder()
 	getContext, _ := gin.CreateTestContext(getResponse)
 	getContext.Request = getRequest

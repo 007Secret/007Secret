@@ -61,6 +61,19 @@ describe('attachment transfer', () => {
     expect(maxAttachmentSize).toBe(10 * 1024 * 1024)
   })
 
+  it('sends extraction credentials in the first signaling frame, not the URL', () => {
+    startSendingAttachment(new File([], 'report.txt'), { key: 'key', password: 'pass' }, {})
+    const sender = FakeSocket.instances[0]
+    sender.onopen?.()
+    expect(sender.send).toHaveBeenCalledWith(JSON.stringify({ type: 'auth', key: 'key', password: 'pass', role: 'sender' }))
+
+    receiveAttachment({ key: 'key', password: 'pass' }, {})
+    const receiver = FakeSocket.instances[1]
+    receiver.onopen?.()
+    expect(receiver.send).toHaveBeenCalledWith(JSON.stringify({ type: 'auth', key: 'key', password: 'pass', role: 'receiver' }))
+    expect(receiver.send).toHaveBeenCalledWith('{"type":"ready"}')
+  })
+
   it('reports a sender signaling disconnect instead of silently waiting', () => {
     const onError = vi.fn()
     startSendingAttachment(new File([], 'report.txt'), { key: 'key', password: 'pass' }, { onError })

@@ -12,10 +12,15 @@ const chunkSize = 64 * 1024
 const connectionTimeout = 30_000
 const offlinePeerMessage = '无法建立 WebRTC 点对点连接。请确认发送方与接收方同时在线并保持页面打开，然后重试。'
 
-function signalingURL(credentials: TransferCredentials, role: 'sender' | 'receiver') {
+function signalingURL() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const query = new URLSearchParams({ ...credentials, role })
-  return `${protocol}//${window.location.host}/api/transfer/signal?${query}`
+  return `${protocol}//${window.location.host}/api/transfer/signal`
+}
+
+// Credentials travel in the first signaling frame, never in the URL, so the
+// extraction code cannot leak into proxy or access logs.
+function sendAuth(socket: WebSocket, credentials: TransferCredentials, role: 'sender' | 'receiver') {
+  socket.send(JSON.stringify({ type: 'auth', key: credentials.key, password: credentials.password, role }))
 }
 
 function sendSignal(socket: WebSocket, type: 'offer' | 'answer' | 'candidate' | 'ready', payload?: unknown) {
@@ -34,7 +39,8 @@ export function startSendingAttachment(file: File, credentials: TransferCredenti
     callbacks.onError?.('当前浏览器不支持 WebRTC 点对点传输')
     return () => undefined
   }
-  const socket = new WebSocket(signalingURL(credentials, 'sender'))
+  const socket = new WebSocket(signalingURL())
+  socket.onopen = () => sendAuth(socket, credentials, 'sender')
   let closed = false
   let peer: RTCPeerConnection | undefined
   let channel: RTCDataChannel | undefined
@@ -122,7 +128,7 @@ export function receiveAttachment(credentials: TransferCredentials, callbacks: T
     callbacks.onError?.('当前浏览器不支持 WebRTC 点对点传输')
     return () => undefined
   }
-  const socket = new WebSocket(signalingURL(credentials, 'receiver'))
+  const socket = new WebSocket(signalingURL())
   const peer = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] })
   let received = 0
   let metadata: { name: string; type: string; size: number } | null = null
@@ -191,7 +197,10 @@ export function receiveAttachment(credentials: TransferCredentials, callbacks: T
   socket.onclose = () => {
     if (!connected) fail('信令连接已断开，请重新尝试连接')
   }
-  socket.onopen = () => sendSignal(socket, 'ready')
+  socket.onopen = () => {
+    sendAuth(socket, credentials, 'receiver')
+    sendSignal(socket, 'ready')
+  }
   peer.ondatachannel = ({ channel }) => {
     connected = true
     if (timeout) window.clearTimeout(timeout)

@@ -11,12 +11,17 @@ import (
 	"math/big"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/007Secret/007Secret/utils"
 	"github.com/gin-gonic/gin"
 )
 
 const maxAttachmentSize = 10 * 1024 * 1024
+
+// maxContentLength mirrors the client-side textarea limit so the server does not
+// trust the browser to enforce it.
+const maxContentLength = 10000
 
 type AttachmentMetadata struct {
 	Name string `json:"name"`
@@ -139,9 +144,18 @@ func validateAttachmentMetadata(attachment *AttachmentMetadata) error {
 func CreateSecretHandler(c *gin.Context) {
 	var req SecretRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			c.JSON(http.StatusRequestEntityTooLarge, ErrorResponse{Error: "Request body too large"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Error: "Invalid request body",
 		})
+		return
+	}
+	if utf8.RuneCountInString(req.Content) > maxContentLength {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Content too long"})
 		return
 	}
 	if err := validateAttachmentMetadata(req.Attachment); err != nil {
@@ -202,7 +216,17 @@ func CreateSecretHandler(c *gin.Context) {
 
 func GetSecretHandler(c *gin.Context) {
 	key := c.Query("key")
-	password := c.Query("password")
+
+	// The extraction code is submitted in the request body, never in the URL, so
+	// it cannot leak through proxy/access logs or browser history.
+	var req struct {
+		Password string `json:"password"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Invalid request body"})
+		return
+	}
+	password := req.Password
 
 	if key == "" || password == "" {
 		c.JSON(http.StatusBadRequest, ErrorResponse{

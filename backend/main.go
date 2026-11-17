@@ -37,6 +37,9 @@ func main() {
 func setupRouter() *gin.Engine {
 	r := gin.Default()
 
+	// 安全响应头（API 直接访问时也生效；SPA 文档的头由 nginx 设置）
+	r.Use(api.NewSecurityHeaders())
+
 	// 配置CORS
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"*"},
@@ -47,9 +50,9 @@ func setupRouter() *gin.Engine {
 
 	// 注册路由处理器
 	signalingHub := api.NewSignalingHub()
-	r.POST("/api/secret", api.CreateSecretHandler)
-	r.GET("/api/secret/get", api.GetSecretHandler)
-	r.GET("/api/transfer/signal", signalingHub.Handle)
+	r.POST("/api/secret", api.NewBodyLimit(api.MaxRequestBodyBytes), api.CreateSecretHandler)
+	r.POST("/api/secret/get", api.NewBodyLimit(api.MaxRequestBodyBytes), api.NewSecretGetGuard(), api.GetSecretHandler)
+	r.GET("/api/transfer/signal", api.NewSignalGuard(), signalingHub.Handle)
 
 	return r
 }

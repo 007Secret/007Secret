@@ -39,12 +39,11 @@ describe('ViewSecret', () => {
     vi.unstubAllGlobals()
   })
 
-  it('prefills a password from the link and presents the one-time flow', async () => {
-    route.query = { password: '8F4K2P' }
+  it('starts with an empty extraction code and presents the one-time flow', async () => {
     const wrapper = mount(ViewSecret)
     await flushPromises()
 
-    expect(wrapper.get('input[aria-label="提取码"]').element).toHaveProperty('value', '8F4K2P')
+    expect(wrapper.get('input[aria-label="提取码"]').element).toHaveProperty('value', '')
     expect(wrapper.text()).toContain('输入提取码后，秘密将被读取并立即销毁')
     expect(wrapper.text()).toContain('打开前请确认')
   })
@@ -170,8 +169,19 @@ describe('ViewSecret', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('这个秘密已不存在')
-    expect(wrapper.text()).toContain('密钥不存在或已被查看')
+    expect(wrapper.text()).toContain('密钥不存在、已失效或提取码错误')
     await wrapper.get('button[data-test="home-button"]').trigger('click')
     expect(routerPush).toHaveBeenCalledWith('/')
+  })
+
+  it('renders a rate-limit error for 429 responses', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 429 }))
+    const wrapper = mount(ViewSecret)
+
+    await wrapper.get('input').setValue('8F4K2P')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('尝试次数过多，请稍后再试')
   })
 })

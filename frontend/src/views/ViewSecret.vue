@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { receiveAttachment, type TransferCredentials } from '../lib/attachmentTransfer'
 import { formatFileSize } from '../lib/formatFileSize'
@@ -26,11 +26,6 @@ const attachmentTitle = computed(() => ({
 let attachmentCredentials: TransferCredentials | undefined
 let transferAttempt = 0
 let stopReceivingAttachment: (() => void) | undefined
-
-onMounted(() => {
-  const queryPassword = route.query.password
-  password.value = Array.isArray(queryPassword) ? queryPassword[0] ?? '' : queryPassword ?? ''
-})
 
 onBeforeUnmount(() => {
   transferAttempt += 1
@@ -95,13 +90,19 @@ function connectAttachment() {
 }
 
 async function consumeSecret(key: string) {
-  const response = await fetch(`/api/secret/get?key=${key}&password=${encodeURIComponent(password.value)}`, {
-      method: 'GET',
+  // Submit the extraction code in the request body so it never appears in the
+  // URL, browser history, or proxy access logs.
+  const response = await fetch(`/api/secret/get?key=${encodeURIComponent(key)}`, {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: password.value }),
     })
   if (!response.ok) {
-    if (response.status === 404) throw new Error('密钥不存在或已被查看')
-    if (response.status === 401) throw new Error('提取码错误')
+    // The backend deliberately does not distinguish a wrong extraction code
+    // from a missing/expired secret, and returns 404 for both.
+    if (response.status === 404) throw new Error('密钥不存在、已失效或提取码错误')
+    // 429 = rate limit or too many failed attempts for this key.
+    if (response.status === 429) throw new Error('尝试次数过多，请稍后再试')
     throw new Error('服务器错误，请稍后重试')
   }
   const data = await response.json()

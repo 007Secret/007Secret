@@ -13,7 +13,7 @@ describe('HomeView', () => {
     const textarea = wrapper.get('textarea[aria-label="秘密内容"]')
 
     expect(wrapper.text()).toContain('让秘密，只被看见一次')
-    expect(wrapper.text()).toContain('内容将被加密存储，我们无法读取')
+    expect(wrapper.text()).toContain('内容在服务器加密存储')
     expect(wrapper.text()).toContain('0 / 10,000')
     expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeDefined()
 

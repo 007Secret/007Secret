@@ -47,7 +47,7 @@ function toggleDarkMode() {
         <div class="flex items-center gap-3">
           <div class="hidden items-center gap-2 rounded-full border border-blue-200 bg-[var(--primary-soft)] px-3.5 py-2 text-xs font-semibold text-[var(--primary)] sm:flex dark:border-blue-800">
             <span class="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,.12)]"></span>
-            端到端加密 · 阅后即焚
+            加密存储 · 阅后即焚
           </div>
           <button
             type="button"

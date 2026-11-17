@@ -15,6 +15,15 @@ type signalingMessage struct {
 	Payload json.RawMessage `json:"payload"`
 }
 
+// authMessage is the first frame a peer sends so the extraction code stays out
+// of the WebSocket URL (and therefore out of proxy / access logs).
+type authMessage struct {
+	Type     string `json:"type"`
+	Key      string `json:"key"`
+	Password string `json:"password"`
+	Role     string `json:"role"`
+}
+
 type signalingRoom struct {
 	sender        *websocket.Conn
 	receiver      *websocket.Conn
@@ -40,20 +49,35 @@ func NewSignalingHub() *SignalingHub {
 }
 
 func (h *SignalingHub) Handle(c *gin.Context) {
-	key := c.Query("key")
-	password := c.Query("password")
-	role := c.Query("role")
-	if key == "" || password == "" || (role != "sender" && role != "receiver") {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Invalid signaling request"})
-		return
-	}
-
 	connection, err := h.upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		return
 	}
 
-	roomKey := key + ":" + password
+	// Cap the frame size before any authentication so an unauthenticated peer
+	// cannot exhaust server memory with an oversized frame. 64 KiB comfortably
+	// fits auth and SDP signal frames.
+	connection.SetReadLimit(64 * 1024)
+
+	// The extraction code is never placed in the URL; the peer must authenticate
+	// in its first frame so credentials do not appear in logs or browser history.
+	_ = connection.SetReadDeadline(time.Now().Add(10 * time.Second))
+	_, authPayload, err := connection.ReadMessage()
+	if err != nil {
+		_ = connection.Close()
+		return
+	}
+	var auth authMessage
+	if err := json.Unmarshal(authPayload, &auth); err != nil ||
+		auth.Type != "auth" || auth.Key == "" || auth.Password == "" ||
+		(auth.Role != "sender" && auth.Role != "receiver") {
+		_ = connection.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "invalid signaling auth"), time.Now().Add(time.Second))
+		_ = connection.Close()
+		return
+	}
+
+	roomKey := auth.Key + ":" + auth.Password
+	role := auth.Role
 	room, receiverReady, added := h.addPeer(roomKey, role, connection)
 	if !added {
 		_ = connection.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "role already connected"), time.Now().Add(time.Second))
